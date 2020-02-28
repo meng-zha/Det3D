@@ -594,7 +594,7 @@ def noise_per_object_v3_(
     num_try=5,
     group_ids=None,
 ):
-    """random rotate or remove each groundtrutn independently.
+    """random rotate or remove each groundtruth independently.
     use kitti viewer to test this function points_transform_
 
     Args:

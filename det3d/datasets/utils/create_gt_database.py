@@ -14,6 +14,7 @@ dataset_name_map = {
     "KITTI": "KittiDataset",
     "NUSC": "NuScenesDataset",
     "LYFT": "LyftDataset",
+    "LVX": "LvxDataset",
 }
 
 
@@ -70,6 +71,8 @@ def create_groundtruth_database(
         point_features = 5
     elif dataset_class_name == "KITTI":
         point_features = 4
+    elif dataset_class_name == "LVX":
+        point_features = 3
 
     db_path.mkdir(parents=True, exist_ok=True)
 
@@ -90,6 +93,8 @@ def create_groundtruth_database(
         elif dataset_class_name == "KITTI":
             points = sensor_data["lidar"]["points"]
         elif dataset_class_name == "LYFT":
+            points = sensor_data["lidar"]["points"]
+        elif dataset_class_name == "LVX":
             points = sensor_data["lidar"]["points"]
 
         print(points.shape)

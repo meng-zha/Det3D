@@ -4,11 +4,15 @@ WORK_DIR=$2
 CHECKPOINT=$3
 
 # Test
-python -m torch.distributed.launch \
-    --nproc_per_node=8 \
-    ./tools/dist_test.py \
+# python -m torch.distributed.launch \
+#     --nproc_per_node=1 \
+#     ./tools/dist_test.py \
+#     $CONFIG \
+#     --work_dir=$WORK_DIR \
+#     --checkpoint=$CHECKPOINT \
+
+
+CUDA_VISIBLE_DEVICES=1 python -W ignore ./tools/dist_test.py \
     $CONFIG \
     --work_dir=$WORK_DIR \
     --checkpoint=$CHECKPOINT \
-
-

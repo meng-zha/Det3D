@@ -58,7 +58,7 @@ class Preprocess(object):
 
         res["mode"] = self.mode
 
-        if res["type"] in ["KittiDataset", "LyftDataset"]:
+        if res["type"] in ["KittiDataset", "LyftDataset","LvxDataset"]:
             points = res["lidar"]["points"]
         elif res["type"] == "NuScenesDataset":
             points = res["lidar"]["combined"]

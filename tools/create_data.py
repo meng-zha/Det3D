@@ -7,6 +7,7 @@ import fire
 from det3d.datasets.kitti import kitti_common as kitti_ds
 from det3d.datasets.nuscenes import nusc_common as nu_ds
 from det3d.datasets.lyft import lyft_common as lyft_ds
+from det3d.datasets.lvx import lvx_common as lvx_ds
 from det3d.datasets.utils.create_gt_database import create_groundtruth_database
 
 
@@ -33,6 +34,13 @@ def lyft_data_prep(root_path, version="trainval"):
     lyft_ds.create_lyft_infos(root_path, version=version)
     create_groundtruth_database(
         "LYFT", root_path, Path(root_path) / "lyft_info_train.pkl"
+    )
+
+def lvx_data_prep(root_path):
+    lvx_ds.create_lvx_info_file(root_path)
+    # lvx_ds.create_reduced_point_cloud(root_path)
+    create_groundtruth_database(
+        "LVX", root_path, Path(root_path) / "lvx_infos_train.pkl"
     )
 
 

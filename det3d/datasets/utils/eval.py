@@ -110,7 +110,7 @@ def calculate_iou_partly(
             dims = np.concatenate([a["dimensions"] for a in dt_annos_part], 0)
             rots = np.concatenate([a["rotation_y"] for a in dt_annos_part], 0)
             dt_boxes = np.concatenate([loc, dims, rots[..., np.newaxis]], axis=1)
-            overlap_part = box3d_overlap(
+            overlap_part = box3d_overlap_lvx(
                 gt_boxes, dt_boxes, z_axis=z_axis, z_center=z_center
             ).astype(np.float64)
         else:
@@ -355,6 +355,42 @@ def box3d_overlap_kernel(boxes, qboxes, rinc, criterion=-1, z_axis=1, z_center=1
                 else:
                     rinc[i, j] = 0.0
 
+@numba.jit(nopython=True, parallel=True)
+def box3d_overlap_kernel_lvx(boxes, qboxes, rinc, criterion=-1, z_axis=1, z_center=0.5):
+    """
+        z_axis: the z (height) axis.
+        z_center: unified z (height) center of box.
+    """
+    N, K = boxes.shape[0], qboxes.shape[0]
+    for i in range(N):
+        for j in range(K):
+            if rinc[i, j] > 0:
+                min_z = min(
+                    boxes[i, z_axis] + boxes[i, z_axis + 2] * (1 - z_center),
+                    qboxes[j, z_axis] + qboxes[j, z_axis + 2] * (1 - z_center),
+                )
+                max_z = max(
+                    boxes[i, z_axis] - boxes[i, z_axis + 2] * z_center,
+                    qboxes[j, z_axis] - qboxes[j, z_axis + 2] * z_center,
+                )
+                iw = min_z - max_z
+                if iw > 0:
+                    area1 = boxes[i, 3] * boxes[i, 4] * boxes[i, 5]
+                    area2 = qboxes[j, 3] * qboxes[j, 4] * qboxes[j, 5]
+                    inc = iw * rinc[i, j]
+                    if criterion == -1:
+                        ua = area1 + area2 - inc
+                    elif criterion == 0:
+                        ua = area1
+                    elif criterion == 1:
+                        ua = area2
+                    else:
+                        ua = 1.0
+                    rinc[i, j] = inc / ua
+                else:
+                    rinc[i, j] = 0.0
+
+
 
 def box3d_overlap(boxes, qboxes, criterion=-1, z_axis=1, z_center=1.0):
     """kitti camera format z_axis=1.
@@ -364,4 +400,14 @@ def box3d_overlap(boxes, qboxes, criterion=-1, z_axis=1, z_center=1.0):
     bev_axes.pop(z_axis)
     rinc = rotate_iou_gpu_eval(boxes[:, bev_axes], qboxes[:, bev_axes], 2)
     box3d_overlap_kernel(boxes, qboxes, rinc, criterion, z_axis, z_center)
+    return rinc
+
+def box3d_overlap_lvx(boxes, qboxes, criterion=-1, z_axis=1, z_center=1.0):
+    """kitti camera format z_axis=1.
+    """
+    bev_axes = list(range(7))
+    bev_axes.pop(z_axis + 2)
+    bev_axes.pop(z_axis)
+    rinc = rotate_iou_gpu_eval(boxes[:, bev_axes], qboxes[:, bev_axes], 2)
+    box3d_overlap_kernel_lvx(boxes, qboxes, rinc, criterion, z_axis, z_center)
     return rinc

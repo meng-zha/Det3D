@@ -94,7 +94,8 @@ def main():
 
     model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
 
-    dataset = build_dataset(cfg.data.val)
+    # dataset = build_dataset(cfg.data.val)
+    dataset = build_dataset(cfg.data.test)
     data_loader = build_dataloader(
         dataset,
         batch_size=cfg.data.samples_per_gpu,
@@ -158,7 +159,7 @@ def main():
     for p in all_predictions:
         predictions.update(p)
 
-    result_dict, _ = dataset.evaluation(predictions, output_dir=args.work_dir)
+    result_dict, _ = dataset.evaluation(predictions, output_dir=args.work_dir,vis=True)
 
     for k, v in result_dict["results"].items():
         print(f"Evaluation {k}: {v}")
@@ -174,7 +175,7 @@ def main():
                     fout.write(line + "\n")
 
         ap_result_str, ap_dict = kitti_evaluate(
-            "/data/Datasets/KITTI/Kitti/object/training/label_2",
+            "/data1/kitti_object_detection/object/training/label_2",
             res_dir,
             label_split_file="/data/Datasets/KITTI/Kitti/ImageSets/val.txt",
             current_class=0,

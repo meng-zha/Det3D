@@ -8,9 +8,7 @@ from det3d.utils.config_tool import get_downsample_factor
 norm_cfg = None
 
 tasks = [
-    dict(num_class=1, class_names=["Car"]),
-    dict(num_class=1, class_names=["Pedestrian"]),
-    dict(num_class=1, class_names=["Cyclist"]),
+    dict(num_class=1, class_names=["Pedestrian",],),
 ]
 
 class_names = list(itertools.chain(*[t["class_names"] for t in tasks]))
@@ -21,30 +19,14 @@ target_assigner = dict(
     anchor_generators=[
         dict(
             type="anchor_generator_range",
-            sizes=[1.6, 3.9, 1.56],
-            anchor_ranges=[0, -40.0, -1.0, 70.4, 40.0, -1.0],
+            sizes=[0.5, 0.5, 1.8],
+            anchor_ranges=[-40, -40.0, 0.9, 40.0, 40.0, 0.9],
+            strides=[0.4, 0.4, 0.0], # if generate only 1 z_center, z_stride will be ignored
+            offsets=[-39.8, -39.8, 0.9], # origin_offset + strides / 2 TODO: offsets
             rotations=[0, 1.57],
             matched_threshold=0.6,
-            unmatched_threshold=0.45,
-            class_name="Car",
-        ),
-        dict(
-            type="anchor_generator_range",
-            sizes=[0.6, 0.8, 1.73],
-            anchor_ranges=[0, -40.0, -0.6, 70.4, 40.0, -0.6],
-            rotations=[0, 1.57],
-            matched_threshold=0.4,
-            unmatched_threshold=0.2,
+            unmatched_threshold=0.3,
             class_name="Pedestrian",
-        ),
-        dict(
-            type="anchor_generator_range",
-            sizes=[0.6, 1.76, 1.73],
-            anchor_ranges=[0, -40.0, -0.6, 70.4, 40.0, -0.6],
-            rotations=[0, 1.57],
-            matched_threshold=0.4,
-            unmatched_threshold=0.2,
-            class_name="Cyclist",
         ),
     ],
     sample_positive_fraction=-1,
@@ -60,25 +42,24 @@ box_coder = dict(
 
 # model settings
 model = dict(
-    type="VoxelNet",
+    type="PointPillars",
     pretrained=None,
     reader=dict(
-        type="VoxelFeatureExtractorV3",
-        # type='SimpleVoxel',
         num_input_features=4,
+        type="PillarFeatureNet",
+        num_filters=[64],
+        with_distance=False,
         norm_cfg=norm_cfg,
     ),
-    backbone=dict(
-        type="SpMiddleFHD", num_input_features=4, ds_factor=8, norm_cfg=norm_cfg,
-    ),
+    backbone=dict(type="PointPillarsScatter", ds_factor=1, norm_cfg=norm_cfg,),
     neck=dict(
         type="RPN",
-        layer_nums=[5,],
-        ds_layer_strides=[1,],
-        ds_num_filters=[128,],
-        us_layer_strides=[1,],
-        us_num_filters=[128,],
-        num_input_features=128,
+        layer_nums=[3, 5, 5],
+        ds_layer_strides=[1, 2, 2],
+        ds_num_filters=[128, 128, 256],
+        us_layer_strides=[1, 2, 4],
+        us_num_filters=[256, 256, 256],
+        num_input_features=64,
         norm_cfg=norm_cfg,
         logger=logging.getLogger("RPN"),
     ),
@@ -86,7 +67,7 @@ model = dict(
         # type='RPNHead',
         type="MultiGroupHead",
         mode="3d",
-        in_channels=sum([128,]),
+        in_channels=sum([256,256,256]),  # this is linked to 'neck' us_num_filters
         norm_cfg=norm_cfg,
         tasks=tasks,
         weights=[1,],
@@ -95,7 +76,7 @@ model = dict(
         loss_norm=dict(
             type="NormByNumPositives", pos_cls_weight=1.0, neg_cls_weight=1.0,
         ),
-        loss_cls=dict(type="SigmoidFocalLoss", alpha=0.25, gamma=2.0, loss_weight=1.0,),
+        loss_cls=dict(type="SigmoidFocalLoss", alpha=0.25, gamma=2.0, loss_weight=0.1,),
         use_sigmoid_score=True,
         loss_bbox=dict(
             type="WeightedSmoothL1Loss",
@@ -108,7 +89,7 @@ model = dict(
         loss_aux=dict(
             type="WeightedSoftmaxClassificationLoss",
             name="direction_classifier",
-            loss_weight=0.2,
+            loss_weight=1.0,
         ),
         direction_offset=0.0,
     ),
@@ -118,8 +99,8 @@ assigner = dict(
     box_coder=box_coder,
     target_assigner=target_assigner,
     out_size_factor=get_downsample_factor(model),
-    debug=False,
 )
+
 
 train_cfg = dict(assigner=assigner)
 
@@ -128,25 +109,25 @@ test_cfg = dict(
         use_rotate_nms=True,
         use_multi_class_nms=False,
         nms_pre_max_size=1000,
-        nms_post_max_size=100,
-        nms_iou_threshold=0.01,
+        nms_post_max_size=30,
+        nms_iou_threshold=0.1,
     ),
-    score_threshold=0.3,
-    post_center_limit_range=[0, -40.0, -5.0, 70.4, 40.0, 5.0],
+    score_threshold=0.2,
+    post_center_limit_range=[-40, -40.0, -0.5, 40.0, 40.0, 2.5],
     max_per_img=100,
 )
 
 # dataset settings
-dataset_type = "KittiDataset"
-data_root = "/data1/kitti_object_detection/object"
+dataset_type = "LvxDataset"
+data_root = "/data1/3d_detection/BBOX_x4"
 
 db_sampler = dict(
     type="GT-AUG",
     enable=True,
-    db_info_path="/data1/kitti_object_detection/object/dbinfos_train.pkl",
-    sample_groups=[dict(Car=15), dict(Pedestrian=8), dict(Cyclist=8),],
+    db_info_path=data_root+"/dbinfos_train.pkl",
+    sample_groups=[dict(Pedestrian=8,),],
     db_prep_steps=[
-        dict(filter_by_min_num_points=dict(Car=5, Pedestrian=5, Cyclist=5)),
+        dict(filter_by_min_num_points=dict(Pedestrian=3,)),
         dict(filter_by_difficulty=[-1],),
     ],
     global_random_rotation_range_per_object=[0, 0],
@@ -155,9 +136,9 @@ db_sampler = dict(
 train_preprocessor = dict(
     mode="train",
     shuffle_points=True,
-    gt_loc_noise=[1.0, 1.0, 0.5],
-    gt_rot_noise=[-0.785, 0.785],
-    global_rot_noise=[-0.785, 0.785],
+    gt_loc_noise=[0.25, 0.25, 0.25],
+    gt_rot_noise=[-0.15707963267, 0.15707963267],
+    global_rot_noise=[-0.78539816, 0.78539816],
     global_scale_noise=[0.95, 1.05],
     global_rot_per_obj_range=[0, 0],
     global_trans_noise=[0.0, 0.0, 0.0],
@@ -177,15 +158,22 @@ val_preprocessor = dict(
     remove_unknown_examples=False,
 )
 
+test_preprocessor = dict(
+    mode="test",
+    shuffle_points=False,
+    remove_environment=False,
+    remove_unknown_examples=False,
+)
+
 voxel_generator = dict(
-    range=[0, -40.0, -3.0, 70.4, 40.0, 1.0],
-    voxel_size=[0.05, 0.05, 0.1],
-    max_points_in_voxel=5,
-    max_voxel_num=40000,
+    range=[-40, -40, -0.1, 40, 40, 2.0],
+    voxel_size=[0.22, 0.22, 0.5],
+    max_points_in_voxel=35,
+    max_voxel_num=160000,
 )
 
 train_pipeline = [
-    dict(type="LoadPointCloudFromFile"),
+    dict(type="LoadPointCloudFromFile", dataset=dataset_type),
     dict(type="LoadPointCloudAnnotations", with_bbox=True),
     dict(type="Preprocess", cfg=train_preprocessor),
     dict(type="Voxelization", cfg=voxel_generator),
@@ -193,26 +181,34 @@ train_pipeline = [
     dict(type="Reformat"),
     # dict(type='PointCloudCollect', keys=['points', 'voxels', 'annotations', 'calib']),
 ]
-test_pipeline = [
-    dict(type="LoadPointCloudFromFile"),
+val_pipeline = [
+    dict(type="LoadPointCloudFromFile", dataset=dataset_type),
     dict(type="LoadPointCloudAnnotations", with_bbox=True),
     dict(type="Preprocess", cfg=val_preprocessor),
     dict(type="Voxelization", cfg=voxel_generator),
     dict(type="AssignTarget", cfg=train_cfg["assigner"]),
     dict(type="Reformat"),
 ]
+test_pipeline = [
+    dict(type="LoadPointCloudFromFile", dataset=dataset_type),
+    # dict(type="LoadPointCloudAnnotations", with_bbox=True),
+    dict(type="Preprocess", cfg=test_preprocessor),
+    dict(type="Voxelization", cfg=voxel_generator),
+    dict(type="AssignTarget", cfg=train_cfg["assigner"]),
+    dict(type="Reformat"),
+]
 
-train_anno = "/data1/kitti_object_detection/object/kitti_infos_train.pkl"
-val_anno = "/data1/kitti_object_detection/object/kitti_infos_val.pkl"
+train_anno = data_root+"/lvx_infos_train.pkl"
+val_anno = data_root+"/lvx_infos_val.pkl"
 test_anno = None
 
 data = dict(
-    samples_per_gpu=6,
-    workers_per_gpu=6,
+    samples_per_gpu=2,
+    workers_per_gpu=2,
     train=dict(
         type=dataset_type,
         root_path=data_root,
-        info_path=data_root + "/kitti_infos_train.pkl",
+        info_path=data_root + "/lvx_infos_train.pkl",
         ann_file=train_anno,
         class_names=class_names,
         pipeline=train_pipeline,
@@ -220,30 +216,42 @@ data = dict(
     val=dict(
         type=dataset_type,
         root_path=data_root,
-        info_path=data_root + "/kitti_infos_val.pkl",
+        info_path=data_root + "/lvx_infos_val.pkl",
         ann_file=val_anno,
         class_names=class_names,
-        pipeline=test_pipeline,
+        pipeline=val_pipeline,
     ),
     test=dict(
         type=dataset_type,
         root_path=data_root,
-        info_path=test_anno,
+        info_path=data_root + "/lvx_infos_test.pkl",
         ann_file=test_anno,
         class_names=class_names,
         pipeline=test_pipeline,
     ),
 )
 
+# optimizer = dict(type='SGD', lr=0.0002, momentum=0.9, weight_decay=0.0001)
+# optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
+# # learning policy
+# lr_config = dict(
+#     type='multinomial',
+#     policy='step',
+#     warmup='linear',
+#     warmup_iters=500,
+#     warmup_ratio=1.0 / 3,
+#     step=[15, 30, 45, 40, 75, 90, 105, 120, 135, 150])
+
 # optimizer
 optimizer = dict(
     type="adam", amsgrad=0.0, wd=0.01, fixed_wd=True, moving_average=False,
 )
+
 """training hooks """
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy in training hooks
 lr_config = dict(
-    type="one_cycle", lr_max=0.003, moms=[0.95, 0.85], div_factor=10.0, pct_start=0.4,
+    type="one_cycle", lr_max=5e-3, moms=[0.95, 0.85], div_factor=10.0, pct_start=0.4,
 )
 
 checkpoint_config = dict(interval=1)
@@ -258,10 +266,10 @@ log_config = dict(
 # yapf:enable
 # runtime settings
 total_epochs = 100
-device_ids = range(8)
+device_ids = range(4)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"
-work_dir = "/data/Outputs/det3d_Outputs/SECOND"
+work_dir = "/data/Outputs/det3d_Outputs/Point_Pillars"
 load_from = None
 resume_from = None
-workflow = [("train", 5), ("val", 1)]
+workflow = [("train", 5),("val",1)]

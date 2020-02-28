@@ -2,6 +2,7 @@ import os.path as osp
 import warnings
 import numpy as np
 from functools import reduce
+import open3d as o3d
 
 import pycocotools.mask as maskUtils
 
@@ -156,6 +157,31 @@ class LoadPointCloudFromFile(object):
 
             res["lidar"]["points"] = points
 
+        elif self.type == "LvxDataset":
+
+            pc_info = info["point_cloud"]
+            velo_path = Path(pc_info["velodyne_path"])
+            if not velo_path.is_absolute():
+                velo_path = (
+                    Path(res["metadata"]["image_prefix"]) / pc_info["velodyne_path"]
+                )
+            velo_reduced_path = (
+                velo_path.parent.parent
+                / (velo_path.parent.stem + "_reduced")
+                / velo_path.name
+            )
+            if velo_reduced_path.exists():
+                velo_path = velo_reduced_path
+
+            pcd = o3d.io.read_point_cloud(str(velo_path))
+            points = np.asarray(pcd.points).astype(np.float32)
+        
+            if np.asarray(pcd.normals).shape[0] != 0:
+                normals_v = np.asarray(pcd.normals)
+                points = np.concatenate([points,normals_v],axis=1)[:,:4].astype(np.float32)
+
+            res["lidar"]["points"] = points
+
         else:
             raise NotImplementedError
 
@@ -177,6 +203,22 @@ class LoadPointCloudAnnotations(object):
                 "tokens": info["gt_boxes_token"],
                 "velocities": info["gt_boxes_velocity"].astype(np.float32),
             }
+
+        elif res["type"] == "LvxDataset":
+            if "annos" in info:
+                annos = info["annos"]
+                locs = annos["location"]
+                dims = annos["dimensions"]
+                rots = annos["rotation_y"]
+                gt_names = annos["name"]
+                gt_boxes = np.concatenate(
+                    [locs, dims, rots[..., np.newaxis]], axis=1
+                ).astype(np.float32)
+
+                res["lidar"]["annotations"] = {
+                    "boxes": gt_boxes,
+                    "names": gt_names,
+                }
 
         elif res["type"] == "KittiDataset":
 

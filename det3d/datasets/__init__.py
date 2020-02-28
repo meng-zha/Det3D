@@ -3,6 +3,7 @@ from .builder import build_dataset
 # from .cityscapes import CityscapesDataset
 from .kitti import KittiDataset
 from .lyft import LyftDataset
+from .lvx import LvxDataset
 from .nuscenes import NuScenesDataset
 
 # from .custom import CustomDataset
@@ -19,6 +20,7 @@ from .registry import DATASETS
 __all__ = [
     "CustomDataset",
     "KittiDataset",
+    "LvxDataset"
     "GroupSampler",
     "DistributedGroupSampler",
     "build_dataloader",

@@ -306,6 +306,7 @@ def train_detector(model, dataset, cfg, distributed=False, validate=False, logge
             find_unused_parameters=True,
         )
     else:
+        torch.cuda.set_device(cfg.local_rank)
         model = model.cuda()
 
     logger.info(f"model structure: {model}")

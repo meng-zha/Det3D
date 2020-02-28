@@ -326,7 +326,7 @@ class Trainer(object):
 
     def load_checkpoint(self, filename, map_location="cpu", strict=False):
         self.logger.info("load checkpoint from %s", filename)
-        return load_checkpoint(self.model, filename, map_location, strict, self.logger)
+        return load_checkpoint(self.model, filename,lambda storage, loc: storage.cuda(map_location), strict, self.logger)
 
     def save_checkpoint(
         self, out_dir, filename_tmpl="epoch_{}.pth", save_optimizer=True, meta=None
