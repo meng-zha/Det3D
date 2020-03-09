@@ -19,7 +19,7 @@ target_assigner = dict(
     anchor_generators=[
         dict(
             type="anchor_generator_range",
-            sizes=[0.5, 0.5, 1.8],
+            sizes=[0.67, 0.8, 1.8],
             anchor_ranges=[-40, -40.0, 0.9, 40.0, 40.0, 0.9],
             strides=[0.4, 0.4, 0.0], # if generate only 1 z_center, z_stride will be ignored
             offsets=[-39.8, -39.8, 0.9], # origin_offset + strides / 2 TODO: offsets
@@ -45,7 +45,7 @@ model = dict(
     type="PointPillars",
     pretrained=None,
     reader=dict(
-        num_input_features=4,
+        num_input_features=3,
         type="PillarFeatureNet",
         num_filters=[64],
         with_distance=False,
@@ -89,7 +89,7 @@ model = dict(
         loss_aux=dict(
             type="WeightedSoftmaxClassificationLoss",
             name="direction_classifier",
-            loss_weight=1.0,
+            loss_weight=2.0,
         ),
         direction_offset=0.0,
     ),
@@ -113,13 +113,13 @@ test_cfg = dict(
         nms_iou_threshold=0.1,
     ),
     score_threshold=0.2,
-    post_center_limit_range=[-40, -40.0, -0.5, 40.0, 40.0, 2.5],
+    post_center_limit_range=[-40, -40.0, -0.1, 40.0, 40.0, 2.5],
     max_per_img=100,
 )
 
 # dataset settings
 dataset_type = "LvxDataset"
-data_root = "/data1/3d_detection/BBOX_x4"
+data_root = "/data3/3d_detection/BBOX_x4"
 
 db_sampler = dict(
     type="GT-AUG",
@@ -251,7 +251,7 @@ optimizer = dict(
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy in training hooks
 lr_config = dict(
-    type="one_cycle", lr_max=5e-3, moms=[0.95, 0.85], div_factor=10.0, pct_start=0.4,
+    type="one_cycle", lr_max=3e-3, moms=[0.95, 0.85], div_factor=10.0, pct_start=0.4,
 )
 
 checkpoint_config = dict(interval=1)

@@ -33,7 +33,6 @@ def get_thresholds(scores: np.ndarray, num_gt, num_sample_pts=41):
         # recall = l_recall
         thresholds.append(score)
         current_recall += 1 / (num_sample_pts - 1.0)
-    print(len(thresholds), len(scores), num_gt)
     return thresholds
 
 
@@ -253,7 +252,6 @@ def eval_class_v3(
                 thresholdss = np.array(thresholdss)
                 thresholds = get_thresholds(thresholdss, total_num_valid_gt)
                 thresholds = np.array(thresholds)
-                print(metric,thresholds)
                 all_thresholds[m, l, k, : len(thresholds)] = thresholds
                 pr = np.zeros([len(thresholds), 4])
                 idx = 0

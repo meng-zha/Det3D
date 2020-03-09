@@ -1,6 +1,8 @@
 import os
 import numpy as np
 from OpenGL.GL import glLineWidth
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import pyqtgraph as pg
 import pyqtgraph.opengl as gl
@@ -69,7 +71,10 @@ def load_velo_scan(velo_filename):
     pcd = o3d.io.read_point_cloud(velo_filename)
     scan = np.asarray(pcd.points)
     norm = np.asarray(pcd.normals)
-    return np.concatenate([scan,norm],axis=1)[:,:4]
+    if norm.shape[0] > 0:
+        return np.concatenate([scan,norm],axis=1)[:,:4]
+    else:
+        return scan
 
 
 def read_label(label_filename):
@@ -230,9 +235,10 @@ def show_bev_objects(lidar,gt_objects,dt_objects,output_dir):
     points = lidar[:,:4]
     points = points[points[:,2]>0.1,:]
     color_map = ['r','g','b','y']
-    colors = [color_map[int(i)] for i in points[:,3]]
+    # colors = [color_map[int(i)] for i in points[:,3]]
     plt.clf()
-    plt.scatter(points[:,0],points[:,1],c=colors ,s=0.1*np.ones((len(points[:,2]),)),linewidth=0.1*np.ones((len(points[:,2]),)))
+    # plt.scatter(points[:,0],points[:,1],c=colors ,s=0.1*np.ones((len(points[:,2]),)),linewidth=0.1*np.ones((len(points[:,2]),)))
+    plt.scatter(points[:,0],points[:,1],s=0.3*np.ones((len(points[:,2]),)),linewidth=0.3*np.ones((len(points[:,2]),)))
 
     for obj in gt_objects:
         if obj.type == "DontCare":

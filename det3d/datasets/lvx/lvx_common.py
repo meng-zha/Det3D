@@ -61,7 +61,7 @@ def _read_imageset_file(path):
 
 
 def _calculate_num_points_in_gt(
-    data_path, infos, relative_path, remove_outside=False, num_features=4
+    data_path, infos, relative_path, remove_outside=False, num_features=3
 ):
     for info in infos:
         pc_info = info["point_cloud"]
@@ -356,7 +356,7 @@ def get_lvx_image_info(
 
     def map_func(idx):
         info = {}
-        pc_info = {"num_features": 4}
+        pc_info = {"num_features": 3}
         calib_info = {}
 
         annotations = None

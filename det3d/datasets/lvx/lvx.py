@@ -17,7 +17,8 @@ from .lvx_vis import lvx_vis
 @DATASETS.register_module
 class LvxDataset(PointCloudDataset):
 
-    NumPointFeatures = 4
+    NumPointFeatures = 3
+    # NumPointFeatures = 4
 
     def __init__(
         self,
