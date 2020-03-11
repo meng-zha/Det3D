@@ -19,7 +19,7 @@ target_assigner = dict(
     anchor_generators=[
         dict(
             type="anchor_generator_range",
-            sizes=[0.67, 0.8, 1.8],
+            sizes=[0.5, 0.6, 1.8],
             anchor_ranges=[-40, -40.0, 0.9, 40.0, 40.0, 0.9],
             strides=[0.4, 0.4, 0.0], # if generate only 1 z_center, z_stride will be ignored
             offsets=[-39.8, -39.8, 0.9], # origin_offset + strides / 2 TODO: offsets
@@ -119,7 +119,7 @@ test_cfg = dict(
 
 # dataset settings
 dataset_type = "LvxDataset"
-data_root = "/data3/3d_detection/BBOX_x4"
+data_root = "/data3/3d_detection/BBOX_x2"
 
 db_sampler = dict(
     type="GT-AUG",

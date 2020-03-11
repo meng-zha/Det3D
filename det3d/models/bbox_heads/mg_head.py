@@ -171,6 +171,7 @@ def create_loss(
     one_hot_targets = one_hot_f(cls_targets, depth=num_class + 1, dtype=box_preds.dtype)
     if encode_background_as_zeros:
         one_hot_targets = one_hot_targets[..., 1:]
+    # import pdb; pdb.set_trace()
 
     if encode_rad_error_by_sin:
         # sin(a - b) = sinacosb-cosasinb

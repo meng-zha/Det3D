@@ -269,7 +269,7 @@ def show_bev_objects(lidar,gt_objects,dt_objects,output_dir):
         ori3d_pts_3d = compute_orientation_3d(obj)
         x1, y1, z1 = ori3d_pts_3d[0, :]
         x2, y2, z2 = ori3d_pts_3d[1, :]
-        plt.text(x1,y1,f"{obj.h:.1f}",c='k',fontsize=3)
+        plt.text(x1,y1,f"{obj.h:.1f},{obj.rz:.1f}",c='k',fontsize=3)
         plt.plot([x1, x2], [y1, y2],linewidth=0.3,color='k')
 
     if gt_objects == []:

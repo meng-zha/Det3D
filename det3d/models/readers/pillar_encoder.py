@@ -117,7 +117,7 @@ class PillarFeatureNet(nn.Module):
         dtype = features.dtype
 
         # Find distance of x, y, and z from cluster center
-        features = features[:, :, :4]
+        features = features[:, :, :4] # TODO: feature+velocity
         points_mean = features[:, :, :3].sum(dim=1, keepdim=True) / num_voxels.type_as(
             features
         ).view(-1, 1, 1)

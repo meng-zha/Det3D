@@ -74,9 +74,9 @@ def _calculate_num_points_in_gt(
         pcd = o3d.io.read_point_cloud(str(v_path))
         points_v = np.asarray(pcd.points)
         
-        if num_features == 4:
+        if num_features >= 4:
             normals_v = np.asarray(pcd.normals)
-            points_v = np.concatenate([points_v,normals_v],axis=1)[:,:4]
+            points_v = np.concatenate([points_v,normals_v],axis=1)[:,:num_features]
         # points_v = np.fromfile(v_path, dtype=np.float32, count=-1).reshape(
         #     [-1, num_features]
         # )
@@ -356,7 +356,7 @@ def get_lvx_image_info(
 
     def map_func(idx):
         info = {}
-        pc_info = {"num_features": 3}
+        pc_info = {"num_features": 3} # TODO
         calib_info = {}
 
         annotations = None
@@ -371,54 +371,6 @@ def get_lvx_image_info(
             annotations = get_label_anno(label_path,idx)
         info["point_cloud"] = pc_info
         info["token"]=idx
-        # if calib:
-        #     calib_path = get_calib_path(idx, path, training, relative_path=False)
-        #     with open(calib_path, "r") as f:
-        #         lines = f.readlines()
-        #     P0 = np.array([float(info) for info in lines[0].split(" ")[1:13]]).reshape(
-        #         [3, 4]
-        #     )
-        #     P1 = np.array([float(info) for info in lines[1].split(" ")[1:13]]).reshape(
-        #         [3, 4]
-        #     )
-        #     P2 = np.array([float(info) for info in lines[2].split(" ")[1:13]]).reshape(
-        #         [3, 4]
-        #     )
-        #     P3 = np.array([float(info) for info in lines[3].split(" ")[1:13]]).reshape(
-        #         [3, 4]
-        #     )
-        #     if extend_matrix:
-        #         P0 = _extend_matrix(P0)
-        #         P1 = _extend_matrix(P1)
-        #         P2 = _extend_matrix(P2)
-        #         P3 = _extend_matrix(P3)
-        #     R0_rect = np.array(
-        #         [float(info) for info in lines[4].split(" ")[1:10]]
-        #     ).reshape([3, 3])
-        #     if extend_matrix:
-        #         rect_4x4 = np.zeros([4, 4], dtype=R0_rect.dtype)
-        #         rect_4x4[3, 3] = 1.0
-        #         rect_4x4[:3, :3] = R0_rect
-        #     else:
-        #         rect_4x4 = R0_rect
-
-        #     Tr_velo_to_cam = np.array(
-        #         [float(info) for info in lines[5].split(" ")[1:13]]
-        #     ).reshape([3, 4])
-        #     Tr_imu_to_velo = np.array(
-        #         [float(info) for info in lines[6].split(" ")[1:13]]
-        #     ).reshape([3, 4])
-        #     if extend_matrix:
-        #         Tr_velo_to_cam = _extend_matrix(Tr_velo_to_cam)
-        #         Tr_imu_to_velo = _extend_matrix(Tr_imu_to_velo)
-        #     calib_info["P0"] = P0
-        #     calib_info["P1"] = P1
-        #     calib_info["P2"] = P2
-        #     calib_info["P3"] = P3
-        #     calib_info["R0_rect"] = rect_4x4
-        #     calib_info["Tr_velo_to_cam"] = Tr_velo_to_cam
-        #     calib_info["Tr_imu_to_velo"] = Tr_imu_to_velo
-        #     info["calib"] = calib_info
 
         if annotations is not None:
             info["annos"] = annotations
@@ -829,14 +781,14 @@ def get_label_anno(label_path,idx):
     annotations["bbox"] = np.array(
         [[0,0,500,500] for x in content]
     ).reshape(-1, 4)
-    # dimensions will convert hwl format to standard lhw(camera) format.
+    # dimensions will convert wlh format to standard lwh(lvx) format.
     annotations["dimensions"] = np.array(
         [[float(x[3]),float(x[1]),float(x[2])] for x in content]
-    ).reshape(-1, 3)[:, [2, 0, 1]]
+    ).reshape(-1, 3)[:, [1, 0, 2]]
     annotations["location"] = np.array(
         [[float(info) for info in x[4:7]] for x in content]
     ).reshape(-1, 3)
-    annotations["rotation_y"] = np.array([float(x[7]) for x in content]).reshape(-1)
+    annotations["rotation_y"] = np.array([-float(x[7]) for x in content]).reshape(-1)
     index = list(range(num_objects)) + [-1] * (num_gt - num_objects)
     annotations["index"] = np.array(index, dtype=np.int32)
     annotations["group_ids"] = np.arange(num_gt, dtype=np.int32)

@@ -428,13 +428,13 @@ def get_official_eval_result(
         gt_annos and dt_annos must contains following keys:
         [bbox, location, dimensions, rotation, score]
     """
-    # overlap_mod = np.array(
-    #     [
-    #         [0.7, 0.5,],
-    #         [0.7, 0.5,],
-    #         [0.7, 0.5,],
-    #     ]
-    # )
+    overlap_mod = np.array(
+        [
+            [0.7, 0.5,],
+            [0.7, 0.5,],
+            [0.7, 0.5,],
+        ]
+    )
     overlap_easy = np.array(
         [
             [0.7, 0.5,],
