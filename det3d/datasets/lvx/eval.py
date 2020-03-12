@@ -442,7 +442,7 @@ def get_official_eval_result(
             [0.5, 0.25,],
         ]
     )
-    min_overlaps = np.stack([ overlap_easy], axis=0)  # [2, 3, 5]
+    min_overlaps = np.stack([overlap_mod, overlap_easy], axis=0)  # [2, 3, 5]
     class_to_name = {
         0: "car",
         1: "pedestrian",

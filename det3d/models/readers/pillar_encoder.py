@@ -82,6 +82,7 @@ class PillarFeatureNet(nn.Module):
         super().__init__()
         self.name = "PillarFeatureNet"
         assert len(num_filters) > 0
+        self.num_input_features = num_input_features
 
         num_input_features += 5
         if with_distance:
@@ -117,7 +118,7 @@ class PillarFeatureNet(nn.Module):
         dtype = features.dtype
 
         # Find distance of x, y, and z from cluster center
-        features = features[:, :, :4] # TODO: feature+velocity
+        features = features[:, :, :self.num_input_features] # TODO: feature+velocity
         points_mean = features[:, :, :3].sum(dim=1, keepdim=True) / num_voxels.type_as(
             features
         ).view(-1, 1, 1)

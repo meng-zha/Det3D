@@ -61,7 +61,7 @@ def _read_imageset_file(path):
 
 
 def _calculate_num_points_in_gt(
-    data_path, infos, relative_path, remove_outside=False, num_features=3
+    data_path, infos, relative_path, remove_outside=False, num_features=6
 ):
     for info in infos:
         pc_info = info["point_cloud"]
@@ -356,7 +356,7 @@ def get_lvx_image_info(
 
     def map_func(idx):
         info = {}
-        pc_info = {"num_features": 3} # TODO
+        pc_info = {"num_features": 6} # TODO
         calib_info = {}
 
         annotations = None
@@ -783,12 +783,12 @@ def get_label_anno(label_path,idx):
     ).reshape(-1, 4)
     # dimensions will convert wlh format to standard lwh(lvx) format.
     annotations["dimensions"] = np.array(
-        [[float(x[3]),float(x[1]),float(x[2])] for x in content]
-    ).reshape(-1, 3)[:, [1, 0, 2]]
+        [[float(x[2]),float(x[1]),float(x[3])] for x in content]
+    ).reshape(-1, 3)
     annotations["location"] = np.array(
         [[float(info) for info in x[4:7]] for x in content]
     ).reshape(-1, 3)
-    annotations["rotation_y"] = np.array([-float(x[7]) for x in content]).reshape(-1)
+    annotations["rotation_y"] = np.array([float(x[7]) for x in content]).reshape(-1)
     index = list(range(num_objects)) + [-1] * (num_gt - num_objects)
     annotations["index"] = np.array(index, dtype=np.int32)
     annotations["group_ids"] = np.arange(num_gt, dtype=np.int32)

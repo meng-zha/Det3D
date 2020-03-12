@@ -19,13 +19,13 @@ target_assigner = dict(
     anchor_generators=[
         dict(
             type="anchor_generator_range",
-            sizes=[0.5, 0.6, 1.8],
+            sizes=[0.6, 0.8, 1.8],
             anchor_ranges=[-40, -40.0, 0.9, 40.0, 40.0, 0.9],
             strides=[0.4, 0.4, 0.0], # if generate only 1 z_center, z_stride will be ignored
             offsets=[-39.8, -39.8, 0.9], # origin_offset + strides / 2 TODO: offsets
             rotations=[0, 1.57],
-            matched_threshold=0.6,
-            unmatched_threshold=0.3,
+            matched_threshold=0.5,
+            unmatched_threshold=0.25,
             class_name="Pedestrian",
         ),
     ],
@@ -45,7 +45,7 @@ model = dict(
     type="PointPillars",
     pretrained=None,
     reader=dict(
-        num_input_features=3,
+        num_input_features=6,
         type="PillarFeatureNet",
         num_filters=[64],
         with_distance=False,
@@ -119,7 +119,7 @@ test_cfg = dict(
 
 # dataset settings
 dataset_type = "LvxDataset"
-data_root = "/data3/3d_detection/BBOX_x2"
+data_root = "/data3/3d_detection/BBOX_x2_Vel"
 
 db_sampler = dict(
     type="GT-AUG",
@@ -136,7 +136,7 @@ db_sampler = dict(
 train_preprocessor = dict(
     mode="train",
     shuffle_points=True,
-    gt_loc_noise=[0.25, 0.25, 0.25],
+    gt_loc_noise=[0.15, 0.15, 0.15],
     gt_rot_noise=[-0.15707963267, 0.15707963267],
     global_rot_noise=[-0.78539816, 0.78539816],
     global_scale_noise=[0.95, 1.05],
@@ -167,8 +167,8 @@ test_preprocessor = dict(
 
 voxel_generator = dict(
     range=[-40, -40, -0.1, 40, 40, 2.0],
-    voxel_size=[0.22, 0.22, 0.5],
-    max_points_in_voxel=35,
+    voxel_size=[0.25, 0.25, 2.0],
+    max_points_in_voxel=50,
     max_voxel_num=160000,
 )
 
@@ -254,7 +254,7 @@ lr_config = dict(
     type="one_cycle", lr_max=3e-3, moms=[0.95, 0.85], div_factor=10.0, pct_start=0.4,
 )
 
-checkpoint_config = dict(interval=1)
+checkpoint_config = dict(interval=5)
 # yapf:disable
 log_config = dict(
     interval=20,

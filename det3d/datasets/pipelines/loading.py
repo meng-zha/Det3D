@@ -178,7 +178,8 @@ class LoadPointCloudFromFile(object):
         
             if np.asarray(pcd.normals).shape[0] != 0:
                 normals_v = np.asarray(pcd.normals)
-                points = np.concatenate([points,normals_v],axis=1)[:,:4].astype(np.float32)
+                # TODO: num_features
+                points = np.concatenate([points,normals_v],axis=1)[:,:6].astype(np.float32)
 
             res["lidar"]["points"] = points
 
