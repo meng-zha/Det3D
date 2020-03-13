@@ -30,8 +30,8 @@ class Object3d(object):
         self.box2d = annos["bbox"][idx]
 
         # extract 3d bounding box information
-        self.h = annos["dimensions"][idx][1]  # box height
-        self.w = annos["dimensions"][idx][2]  # box width
+        self.h = annos["dimensions"][idx][2]  # box height
+        self.w = annos["dimensions"][idx][1]  # box width
         self.l = annos["dimensions"][idx][0]  # box length (in meters)
         # location (x,y,z) in camera coord.
         self.t = list(annos["location"][idx])

@@ -12,7 +12,7 @@ CHECKPOINT=$3
 #     --checkpoint=$CHECKPOINT \
 
 
-CUDA_VISIBLE_DEVICES=0 python -W ignore ./tools/dist_test.py \
+CUDA_VISIBLE_DEVICES=2 python -W ignore ./tools/dist_test.py \
     $CONFIG \
     --work_dir=$WORK_DIR \
     --checkpoint=$CHECKPOINT \

@@ -88,26 +88,6 @@ class LvxDataset(PointCloudDataset):
                 final_box_preds[:, -1] = box_np_ops.limit_period(
                     final_box_preds[:, -1], offset=0.5, period=np.pi * 2,
                 )
-                final_box_preds[:, 2] -= final_box_preds[:, 5] / 2
-
-                # aim: x, y, z, w, l, h, r -> -y, -z, x, h, w, l, r
-                # (x, y, z, w, l, h r) in lidar -> (x', y', z', l, h, w, r) in camera
-                # box3d_camera = box_np_ops.box_lidar_to_camera(
-                #     final_box_preds, rect, Trv2c
-                # )
-                # camera_box_origin = [0.5, 1.0, 0.5]
-                # box_corners = box_np_ops.center_to_corner_box3d(
-                #     box3d_camera[:, :3],
-                #     box3d_camera[:, 3:6],
-                #     box3d_camera[:, 6],
-                #     camera_box_origin,
-                #     axis=1,
-                # )
-                # box_corners_in_image = box_np_ops.project_to_image(box_corners, P2)
-                # box_corners_in_image: [N, 8, 2]
-                # minxy = np.min(box_corners_in_image, axis=1)
-                # maxxy = np.max(box_corners_in_image, axis=1)
-                # bbox = np.concatenate([minxy, maxxy], axis=1)
                 bbox = np.asarray([0,0,500,500])
                 for j in range(final_box_preds.shape[0]):
                     anno["bbox"].append(bbox)
