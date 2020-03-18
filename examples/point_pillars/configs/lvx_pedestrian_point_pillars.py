@@ -45,7 +45,7 @@ model = dict(
     type="PointPillars",
     pretrained=None,
     reader=dict(
-        num_input_features=6,
+        num_input_features=3,
         type="PillarFeatureNet",
         num_filters=[64],
         with_distance=False,
@@ -67,7 +67,7 @@ model = dict(
         # type='RPNHead',
         type="MultiGroupHead",
         mode="3d",
-        in_channels=sum([256,256,256]),  # this is linked to 'neck' us_num_filters
+        in_channels=3*sum([256,256,256]),  # this is linked to 'neck' us_num_filters
         norm_cfg=norm_cfg,
         tasks=tasks,
         weights=[1,],
@@ -81,7 +81,7 @@ model = dict(
         loss_bbox=dict(
             type="WeightedSmoothL1Loss",
             sigma=3.0,
-            code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.5],
             codewise=True,
             loss_weight=2.0,
         ),
@@ -119,7 +119,7 @@ test_cfg = dict(
 
 # dataset settings
 dataset_type = "LvxDataset"
-data_root = "/data3/3d_detection/BBOX_x2_Vel"
+data_root = "/data3/3d_detection/BBOX_x2_track"
 
 db_sampler = dict(
     type="GT-AUG",
@@ -167,7 +167,7 @@ test_preprocessor = dict(
 
 voxel_generator = dict(
     range=[-40, -40, -0.1, 40, 40, 2.0],
-    voxel_size=[0.25, 0.25, 2.0],
+    voxel_size=[80./280, 80./280, 2.0],
     max_points_in_voxel=50,
     max_voxel_num=160000,
 )
@@ -203,8 +203,8 @@ val_anno = data_root+"/lvx_infos_val.pkl"
 test_anno = None
 
 data = dict(
-    samples_per_gpu=2,
-    workers_per_gpu=2,
+    samples_per_gpu=1,
+    workers_per_gpu=1,
     train=dict(
         type=dataset_type,
         root_path=data_root,
@@ -265,7 +265,7 @@ log_config = dict(
 )
 # yapf:enable
 # runtime settings
-total_epochs = 100
+total_epochs = 150
 device_ids = range(4)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"

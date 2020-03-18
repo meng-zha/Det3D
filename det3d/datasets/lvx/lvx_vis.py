@@ -30,12 +30,22 @@ class Object3d(object):
         self.box2d = annos["bbox"][idx]
 
         # extract 3d bounding box information
-        self.h = annos["dimensions"][idx][1]  # box height
-        self.w = annos["dimensions"][idx][2]  # box width
+        self.h = annos["dimensions"][idx][2]  # box height
+        self.w = annos["dimensions"][idx][1]  # box width
         self.l = annos["dimensions"][idx][0]  # box length (in meters)
+        self.h_1 = annos["dimensions_1"][idx][2]  # box height
+        self.w_1 = annos["dimensions_1"][idx][1]  # box width
+        self.l_1 = annos["dimensions_1"][idx][0]  # box length (in meters)
+        self.h_2 = annos["dimensions_2"][idx][2]  # box height
+        self.w_2 = annos["dimensions_2"][idx][1]  # box width
+        self.l_2 = annos["dimensions_2"][idx][0]  # box length (in meters)
         # location (x,y,z) in camera coord.
         self.t = list(annos["location"][idx])
+        self.t_1 = list(annos["location_1"][idx])
+        self.t_2 = list(annos["location_2"][idx])
         self.rz = annos["rotation_y"][idx]  # yaw angle (around Y-axis in camera coordinates) [-pi..pi]
+        self.rz_1 = annos["rotation_y_1"][idx]  # yaw angle (around Y-axis in camera coordinates) [-pi..pi]
+        self.rz_2 = annos["rotation_y_2"][idx]  # yaw angle (around Y-axis in camera coordinates) [-pi..pi]
 
     def print_object(self):
         print(
@@ -153,6 +163,29 @@ def compute_box_3d(obj):
 
     return np.transpose(corners_3d)
 
+def compute_box_3d_track(l,w,h,rz,x,y,z):
+    """ Takes an object and a projection matrix (P) and projects the 3d
+        bounding box into the image plane.
+        Returns:
+            corners_2d: (8,2) array in left image coord.
+            corners_3d: (8,3) array in in rect camera coord.
+    """
+    # compute rotational matrix around yaw axis
+    R = rotz(rz)
+    # 3d bounding box dimensions
+    # 3d bounding box corners
+    x_corners = [l / 2, l / 2, -l / 2, -l / 2, l / 2, l / 2, -l / 2, -l / 2]
+    z_corners = [0, 0, 0, 0, -h, -h, -h, -h]+h/2
+    y_corners = [w / 2, -w / 2, -w / 2, w / 2, w / 2, -w / 2, -w / 2, w / 2]
+    # rotate and translate 3d bounding box
+    corners_3d = np.dot(R, np.vstack([x_corners, y_corners, z_corners]))
+    # print corners_3d.shape
+    corners_3d[0, :] = corners_3d[0, :] + x
+    corners_3d[1, :] = corners_3d[1, :] + y
+    corners_3d[2, :] = corners_3d[2, :] + z
+    # print 'cornsers_3d: ', corners_3d
+
+    return np.transpose(corners_3d)
 
 def compute_orientation_3d(obj):
     """ Takes an object and a projection matrix (P) and projects the 3d
@@ -231,24 +264,33 @@ def show_lidar_with_boxes(pc_velo, objects, calib):
         p3d.add_line([x1, y1, z1], [x2, y2, z2])
     p3d.show()
 
-def show_bev_objects(lidar,gt_objects,dt_objects,output_dir):
+def show_bev_objects(lidar,lidar_1,lidar_2,gt_objects,dt_objects,output_dir):
     points = lidar[:,:4]
-    points = points[points[:,2]>0.1,:]
     color_map = ['r','g','b','y']
     # colors = [color_map[int(i)] for i in points[:,3]]
     plt.clf()
     # plt.scatter(points[:,0],points[:,1],c=colors ,s=0.1*np.ones((len(points[:,2]),)),linewidth=0.1*np.ones((len(points[:,2]),)))
     plt.scatter(points[:,0],points[:,1],s=0.3*np.ones((len(points[:,2]),)),linewidth=0.3*np.ones((len(points[:,2]),)))
+    plt.scatter(lidar_1[:,0],lidar_1[:,1],c='y',s=0.3*np.ones((len(lidar_1[:,2]),)),linewidth=0.3*np.ones((len(lidar_1[:,2]),)))
+    plt.scatter(lidar_2[:,0],lidar_2[:,1],c='g',s=0.3*np.ones((len(lidar_2[:,2]),)),linewidth=0.3*np.ones((len(lidar_2[:,2]),)))
 
     for obj in gt_objects:
         if obj.type == "DontCare":
             continue
         # Draw bev bounding box
-        box3d_pts_3d = compute_box_3d(obj)
+        box3d_pts_3d = compute_box_3d_track(obj.l,obj.w,obj.h,obj.rz,*obj.t)
         for k in range(4):
             i, j = k, (k + 1) % 4
             plt.plot([box3d_pts_3d[i,0],box3d_pts_3d[j,0]],[box3d_pts_3d[i,1],box3d_pts_3d[j,1]],color='r',linewidth=0.3)
 
+        box3d_pts_3d_1 = compute_box_3d_track(obj.l_1,obj.w_1,obj.h_1,obj.rz_1,*obj.t_1)
+        for k in range(4):
+            i, j = k, (k + 1) % 4
+            plt.plot([box3d_pts_3d_1[i,0],box3d_pts_3d_1[j,0]],[box3d_pts_3d_1[i,1],box3d_pts_3d_1[j,1]],color='y',linewidth=0.3)
+        box3d_pts_3d_2 = compute_box_3d_track(obj.l_2,obj.w_2,obj.h_2,obj.rz_2,*obj.t_2)
+        for k in range(4):
+            i, j = k, (k + 1) % 4
+            plt.plot([box3d_pts_3d_2[i,0],box3d_pts_3d_2[j,0]],[box3d_pts_3d_2[i,1],box3d_pts_3d_2[j,1]],color='black',linewidth=0.3)
         # Draw heading arrow
         ori3d_pts_3d = compute_orientation_3d(obj)
         x1, y1, z1 = ori3d_pts_3d[0, :]
@@ -260,11 +302,19 @@ def show_bev_objects(lidar,gt_objects,dt_objects,output_dir):
         if obj.type == "DontCare":
             continue
         # Draw bev bounding box
-        box3d_pts_3d = compute_box_3d(obj)
+        box3d_pts_3d = compute_box_3d_track(obj.l,obj.w,obj.h,obj.rz,*obj.t)
         for k in range(4):
             i, j = k, (k + 1) % 4
-            plt.plot([box3d_pts_3d[i,0],box3d_pts_3d[j,0]],[box3d_pts_3d[i,1],box3d_pts_3d[j,1]],color='g',linewidth=0.3)
+            plt.plot([box3d_pts_3d[i,0],box3d_pts_3d[j,0]],[box3d_pts_3d[i,1],box3d_pts_3d[j,1]],color='r',linewidth=0.3)
 
+        box3d_pts_3d_1 = compute_box_3d_track(obj.l_1,obj.w_1,obj.h_1,obj.rz_1,*obj.t_1)
+        for k in range(4):
+            i, j = k, (k + 1) % 4
+            plt.plot([box3d_pts_3d_1[i,0],box3d_pts_3d_1[j,0]],[box3d_pts_3d_1[i,1],box3d_pts_3d_1[j,1]],color='gold',linewidth=0.3)
+        box3d_pts_3d_2 = compute_box_3d_track(obj.l_2,obj.w_2,obj.h_2,obj.rz_2,*obj.t_2)
+        for k in range(4):
+            i, j = k, (k + 1) % 4
+            plt.plot([box3d_pts_3d_2[i,0],box3d_pts_3d_2[j,0]],[box3d_pts_3d_2[i,1],box3d_pts_3d_2[j,1]],color='indigo',linewidth=0.3)
         # Draw heading arrow
         ori3d_pts_3d = compute_orientation_3d(obj)
         x1, y1, z1 = ori3d_pts_3d[0, :]
@@ -294,6 +344,7 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
     
     if gt_annos is not None:
         dataset = lvx_object(root_path)
+        # 前两帧不做检测
         gt_image_idxes = [str(info["token"]) for info in gt_annos]
         for idx in gt_image_idxes:
             points = dataset.get_lidar(idx)
@@ -301,8 +352,22 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
             points = points[points[:,0]<60,:]
             points = points[points[:,1]>-60,:]
             points = points[points[:,0]>-60,:]
-            # points = points[points[:,2]>0.2,:]
+            points = points[points[:,2]>0.1,:]
+
+            points_1 = dataset.get_lidar(f'{int(idx)-1}')
+            points_1 = points_1[points_1[:,1]<60,:]
+            points_1 = points_1[points_1[:,0]<60,:]
+            points_1 = points_1[points_1[:,1]>-60,:]
+            points_1 = points_1[points_1[:,0]>-60,:]
+            points_1 = points_1[points_1[:,2]>0.1,:]
             print(points.shape)
+
+            points_2 = dataset.get_lidar(f'{int(idx)+1}')
+            points_2 = points_2[points_2[:,1]<60,:]
+            points_2 = points_2[points_2[:,0]<60,:]
+            points_2 = points_2[points_2[:,1]>-60,:]
+            points_2 = points_2[points_2[:,0]>-60,:]
+            points_2 = points_2[points_2[:,2]>0.1,:]
 
             gt_objects = dataset.get_label_objects(gt_annos[gt_image_idxes.index(idx)])
             dt_objects = dataset.get_label_objects(dt_annos[gt_image_idxes.index(idx)])
@@ -312,7 +377,7 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
 
             img_path = os.path.join(output_dir,f"bev_imgs/lvx_{idx}.png")
 
-            show_bev_objects(points,gt_objects,dt_objects,img_path)
+            show_bev_objects(points,points_1,points_2,gt_objects,dt_objects,img_path)
     
     else:
         dataset = lvx_object(root_path,split="testing")
@@ -324,9 +389,22 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
             points = points[points[:,0]<60,:]
             points = points[points[:,1]>-60,:]
             points = points[points[:,0]>-60,:]
-            # points = points[points[:,2]>0.2,:]
+            points = points[points[:,2]>0.1,:]
             print(points.shape)
 
+            points_1 = dataset.get_lidar(f'{int(idx)-1}')
+            points_1 = points_1[points_1[:,1]<60,:]
+            points_1 = points_1[points_1[:,0]<60,:]
+            points_1 = points_1[points_1[:,1]>-60,:]
+            points_1 = points_1[points_1[:,0]>-60,:]
+            points_1 = points_1[points_1[:,2]>0.1,:]
+
+            points_2 = dataset.get_lidar(f'{int(idx)+1}')
+            points_2 = points_2[points_2[:,1]<60,:]
+            points_2 = points_2[points_2[:,0]<60,:]
+            points_2 = points_2[points_2[:,1]>-60,:]
+            points_2 = points_2[points_2[:,0]>-60,:]
+            points_2 = points_2[points_2[:,2]>0.1,:]
             dt_objects = dataset.get_label_objects(dt_anno)
 
             if not os.path.exists(os.path.join(output_dir,"beicao_imgs")):
@@ -334,7 +412,7 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
 
             img_path = os.path.join(output_dir,f"beicao_imgs/lvx_{idx}.png")
 
-            show_bev_objects(points,[],dt_objects,img_path)
+            show_bev_objects(points,points_1,points_2,[],dt_objects,img_path)
     
 
 

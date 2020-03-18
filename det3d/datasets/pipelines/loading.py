@@ -208,6 +208,7 @@ class LoadPointCloudAnnotations(object):
         elif res["type"] == "LvxDataset":
             if "annos" in info:
                 annos = info["annos"]
+                annos = kitti.remove_dontcare(annos)
                 locs = annos["location"]
                 dims = annos["dimensions"]
                 rots = annos["rotation_y"]
@@ -216,8 +217,18 @@ class LoadPointCloudAnnotations(object):
                     [locs, dims, rots[..., np.newaxis]], axis=1
                 ).astype(np.float32)
 
+                # 将之前一帧和之后一帧的放入annotation，之前一帧标号为1，之后一帧标号为我2
+                gt_boxes_1= np.concatenate(
+                    [annos["location_1"], annos["dimensions_1"], annos["rotation_y_1"][..., np.newaxis]], axis=1
+                ).astype(np.float32)
+                gt_boxes_2= np.concatenate(
+                    [annos["location_2"], annos["dimensions_2"], annos["rotation_y_2"][..., np.newaxis]], axis=1
+                ).astype(np.float32)
+
                 res["lidar"]["annotations"] = {
                     "boxes": gt_boxes,
+                    "boxes_1": gt_boxes_1,
+                    "boxes_2": gt_boxes_2,
                     "names": gt_names,
                 }
 

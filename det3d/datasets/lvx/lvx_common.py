@@ -12,48 +12,6 @@ from tqdm import tqdm
 from det3d.core import box_np_ops
 
 
-def convert_to_kitti_info_version2(info):
-    """convert kitti info v1 to v2 if possible.
-    """
-    if "image" not in info or "calib" not in info or "point_cloud" not in info:
-        info["image"] = {
-            "image_shape": info["img_shape"],
-            "image_idx": info["image_idx"],
-            "image_path": info["img_path"],
-        }
-        info["calib"] = {
-            "R0_rect": info["calib/R0_rect"],
-            "Tr_velo_to_cam": info["calib/Tr_velo_to_cam"],
-            "P2": info["calib/P2"],
-        }
-        info["point_cloud"] = {
-            "velodyne_path": info["velodyne_path"],
-        }
-
-
-def kitti_anno_to_label_file(annos, folder):
-    folder = Path(folder)
-    for anno in annos:
-        image_idx = anno["metadata"]["image_idx"]
-        label_lines = []
-        for j in range(anno["bbox"].shape[0]):
-            label_dict = {
-                "name": anno["name"][j],
-                "alpha": anno["alpha"][j],
-                "bbox": anno["bbox"][j],
-                "location": anno["location"][j],
-                "dimensions": anno["dimensions"][j],
-                "rotation_y": anno["rotation_y"][j],
-                "score": anno["score"][j],
-            }
-            label_line = kitti_result_line(label_dict)
-            label_lines.append(label_line)
-        label_file = folder / f"{get_image_index_str(image_idx)}.txt"
-        label_str = "\n".join(label_lines)
-        with open(label_file, "w") as f:
-            f.write(label_str)
-
-
 def _read_imageset_file(path):
     with open(path, "r") as f:
         lines = f.readlines()
@@ -61,12 +19,13 @@ def _read_imageset_file(path):
 
 
 def _calculate_num_points_in_gt(
-    data_path, infos, relative_path, remove_outside=False, num_features=6
+    data_path, infos, relative_path, remove_outside=False, num_features=3
 ):
+    '''
+    计算bounding box内点的数量
+    '''
     for info in infos:
         pc_info = info["point_cloud"]
-        # image_info = info["image"]
-        # calib = info["calib"]
         if relative_path:
             v_path = str(Path(data_path) / pc_info["velodyne_path"])
         else:
@@ -77,31 +36,15 @@ def _calculate_num_points_in_gt(
         if num_features >= 4:
             normals_v = np.asarray(pcd.normals)
             points_v = np.concatenate([points_v,normals_v],axis=1)[:,:num_features]
-        # points_v = np.fromfile(v_path, dtype=np.float32, count=-1).reshape(
-        #     [-1, num_features]
-        # )
-        # rect = calib["R0_rect"]
-        # Trv2c = calib["Tr_velo_to_cam"]
-        # P2 = calib["P2"]
-        if remove_outside:
-            points_v = box_np_ops.remove_outside_points(
-                points_v, rect, Trv2c, P2, image_info["image_shape"]
-            )
 
-        # points_v = points_v[points_v[:, 0] > 0]
         annos = info["annos"]
-        num_obj = len([n for n in annos["name"] if n != "DontCare"])
-        # annos = kitti.filter_kitti_anno(annos, ['DontCare'])
-        # dims = annos["dimensions"][:num_obj]
-        # loc = annos["location"][:num_obj]
-        # rots = annos["rotation_y"][:num_obj]
-        # gt_boxes_camera = np.concatenate([loc, dims, rots[..., np.newaxis]], axis=1)
-        # gt_boxes_lidar = box_np_ops.box_camera_to_lidar(gt_boxes_camera, rect, Trv2c)
-        # indices = box_np_ops.points_in_rbbox(points_v[:, :3], gt_boxes_lidar)
-        # num_points_in_gt = indices.sum(0)
-        # num_ignored = len(annos["dimensions"]) - num_obj
-        # num_points_in_gt = np.concatenate([num_points_in_gt, -np.ones([num_ignored])])
-        annos["num_points_in_gt"] = len(points_v)
+        dims = annos["dimensions"]
+        loc = annos["location"]
+        rots = annos["rotation_y"]
+        gt_boxes = np.concatenate([loc, dims, rots[..., np.newaxis]], axis=1)
+        indices = box_np_ops.points_in_rbbox(points_v[:, :3], gt_boxes)
+        num_points_in_gt = indices.sum(0)
+        annos["num_points_in_gt"] = num_points_in_gt 
 
 
 def create_lvx_info_file(data_path, save_path=None, relative_path=True):
@@ -152,65 +95,6 @@ def create_lvx_info_file(data_path, save_path=None, relative_path=True):
     print(f"lvx info test file is saved to {filename}")
     with open(filename, 'wb') as f:
         pickle.dump(lvx_infos_test, f)
-
-
-def _create_reduced_point_cloud(data_path, info_path, save_path=None, back=False):
-    with open(info_path, "rb") as f:
-        lvx_infos = pickle.load(f)
-    for info in tqdm(lvx_infos):
-        pc_info = info["point_cloud"]
-
-        v_path = pc_info["velodyne_path"]
-        v_path = Path(data_path) / v_path
-        pcd = o3d.io.read_point_cloud(str(v_path))
-        points_v = np.asarray(pcd.points)
-        # then remove outside.
-        if back:
-            points_v[:, 0] = -points_v[:, 0]
-        # points_v = box_np_ops.remove_outside_points(
-        #     points_v, rect, Trv2c, P2, image_info["image_shape"]
-        # )
-        if save_path is None:
-            save_filename = (
-                v_path.parent.parent / (v_path.parent.stem + "_reduced") / v_path.name
-            )
-            # save_filename = str(v_path) + '_reduced'
-            if back:
-                save_filename += "_back"
-        else:
-            save_filename = str(Path(save_path) / v_path.name)
-            if back:
-                save_filename += "_back"
-        # pcd = o3d.geometry.PointCloud()
-        # pcd.points = o3d.utility.Vector3dVector(points_v)
-        o3d.io.write_point_cloud(str(save_filename),pcd)
-
-
-def create_reduced_point_cloud(
-    data_path,
-    train_info_path=None,
-    val_info_path=None,
-    test_info_path=None,
-    save_path=None,
-    with_back=False,
-):
-    if train_info_path is None:
-        train_info_path = Path(data_path) / "lvx_infos_train.pkl"
-    if val_info_path is None:
-        val_info_path = Path(data_path) / "lvx_infos_val.pkl"
-    if test_info_path is None:
-        test_info_path = Path(data_path) / "lvx_infos_test.pkl"
-
-    _create_reduced_point_cloud(data_path, train_info_path, save_path)
-    _create_reduced_point_cloud(data_path, val_info_path, save_path)
-    _create_reduced_point_cloud(data_path, test_info_path, save_path)
-    if with_back:
-        _create_reduced_point_cloud(data_path, train_info_path, save_path, back=True)
-        _create_reduced_point_cloud(data_path, val_info_path, save_path, back=True)
-        _create_reduced_point_cloud(data_path, test_info_path, save_path, back=True)
-
-    def load_annotations(self, ann_file):
-        pass
 
 
 def area(boxes, add1=False):
@@ -316,11 +200,6 @@ def get_lidar_path(idx, prefix, training=True, relative_path=True, exist_check=T
     )
 
 
-def _extend_matrix(mat):
-    mat = np.concatenate([mat, np.array([[0.0, 0.0, 0.0, 1.0]])], axis=0)
-    return mat
-
-
 def get_lvx_image_info(
     path,
     training=True,
@@ -356,7 +235,7 @@ def get_lvx_image_info(
 
     def map_func(idx):
         info = {}
-        pc_info = {"num_features": 6} # TODO
+        pc_info = {"num_features": 3} 
         calib_info = {}
 
         annotations = None
@@ -383,14 +262,6 @@ def get_lvx_image_info(
     return image_infos
 
 
-def label_str_to_int(labels, remove_dontcare=True, dtype=np.int32):
-    class_to_label = get_class_to_label_map()
-    ret = np.array([class_to_label[l] for l in labels], dtype=dtype)
-    if remove_dontcare:
-        ret = ret[ret > 0]
-    return ret
-
-
 def get_class_to_label_map():
     class_to_label = {
         "Car": 0,
@@ -409,348 +280,25 @@ def get_class_to_label_map():
 def get_classes():
     return get_class_to_label_map().keys()
 
-
-def filter_gt_boxes(gt_boxes, gt_labels, used_classes):
-    mask = np.array([l in used_classes for l in gt_labels], dtype=np.bool)
-    return mask
-
-
-def filter_anno_by_mask(image_anno, mask):
-    img_filtered_annotations = {}
-    for key in image_anno.keys():
-        img_filtered_annotations[key] = image_anno[key][mask]
-    return img_filtered_annotations
-
-
-def filter_infos_by_used_classes(infos, used_classes):
-    new_infos = []
-    for info in infos:
-        annos = info["annos"]
-        name_in_info = False
-        for name in used_classes:
-            if name in annos["name"]:
-                name_in_info = True
-                break
-        if name_in_info:
-            new_infos.append(info)
-    return new_infos
-
-
-def remove_dontcare(image_anno):
-    img_filtered_annotations = {}
-    relevant_annotation_indices = [
-        i for i, x in enumerate(image_anno["name"]) if x != "DontCare"
-    ]
-    for key in image_anno.keys():
-        img_filtered_annotations[key] = image_anno[key][relevant_annotation_indices]
-    return img_filtered_annotations
-
-
-def remove_low_height(image_anno, thresh):
-    img_filtered_annotations = {}
-    relevant_annotation_indices = [
-        i for i, s in enumerate(image_anno["bbox"]) if (s[3] - s[1]) >= thresh
-    ]
-    for key in image_anno.keys():
-        img_filtered_annotations[key] = image_anno[key][relevant_annotation_indices]
-    return img_filtered_annotations
-
-
-def remove_low_score(image_anno, thresh):
-    img_filtered_annotations = {}
-    relevant_annotation_indices = [
-        i for i, s in enumerate(image_anno["score"]) if s >= thresh
-    ]
-    for key in image_anno.keys():
-        img_filtered_annotations[key] = image_anno[key][relevant_annotation_indices]
-    return img_filtered_annotations
-
-
-def keep_arrays_by_name(gt_names, used_classes):
-    inds = [i for i, x in enumerate(gt_names) if x in used_classes]
-    inds = np.array(inds, dtype=np.int64)
-    return inds
-
-
-def drop_arrays_by_name(gt_names, used_classes):
-    inds = [i for i, x in enumerate(gt_names) if x not in used_classes]
-    inds = np.array(inds, dtype=np.int64)
-    return inds
-
-
-def filter_kitti_anno(
-    image_anno, used_classes, used_difficulty=None, dontcare_iou=None
-):
-    if not isinstance(used_classes, (list, tuple, np.ndarray)):
-        used_classes = [used_classes]
-    img_filtered_annotations = {}
-    relevant_annotation_indices = [
-        i for i, x in enumerate(image_anno["name"]) if x in used_classes
-    ]
-    for key in image_anno.keys():
-        img_filtered_annotations[key] = image_anno[key][relevant_annotation_indices]
-    if used_difficulty is not None:
-        relevant_annotation_indices = [
-            i
-            for i, x in enumerate(img_filtered_annotations["difficulty"])
-            if x in used_difficulty
-        ]
-        for key in image_anno.keys():
-            img_filtered_annotations[key] = img_filtered_annotations[key][
-                relevant_annotation_indices
-            ]
-
-    if "DontCare" in used_classes and dontcare_iou is not None:
-        dont_care_indices = [
-            i for i, x in enumerate(img_filtered_annotations["name"]) if x == "DontCare"
-        ]
-        # bounding box format [y_min, x_min, y_max, x_max]
-        all_boxes = img_filtered_annotations["bbox"]
-        ious = iou(all_boxes, all_boxes[dont_care_indices])
-
-        # Remove all bounding boxes that overlap with a dontcare region.
-        if ious.size > 0:
-            boxes_to_remove = np.amax(ious, axis=1) > dontcare_iou
-            for key in image_anno.keys():
-                img_filtered_annotations[key] = img_filtered_annotations[key][
-                    np.logical_not(boxes_to_remove)
-                ]
-    return img_filtered_annotations
-
-
-def filter_annos_class(image_annos, used_class):
-    new_image_annos = []
-    for anno in image_annos:
-        img_filtered_annotations = {}
-        relevant_annotation_indices = [
-            i for i, x in enumerate(anno["name"]) if x in used_class
-        ]
-        for key in anno.keys():
-            img_filtered_annotations[key] = anno[key][relevant_annotation_indices]
-        new_image_annos.append(img_filtered_annotations)
-    return new_image_annos
-
-
-def filter_annos_low_score(image_annos, thresh):
-    new_image_annos = []
-    for anno in image_annos:
-        img_filtered_annotations = {}
-        relevant_annotation_indices = [
-            i for i, s in enumerate(anno["score"]) if s >= thresh
-        ]
-        for key in anno.keys():
-            img_filtered_annotations[key] = anno[key][relevant_annotation_indices]
-        new_image_annos.append(img_filtered_annotations)
-    return new_image_annos
-
-
-def filter_annos_difficulty(image_annos, used_difficulty):
-    new_image_annos = []
-    for anno in image_annos:
-        img_filtered_annotations = {}
-        relevant_annotation_indices = [
-            i for i, x in enumerate(anno["difficulty"]) if x in used_difficulty
-        ]
-        for key in anno.keys():
-            img_filtered_annotations[key] = anno[key][relevant_annotation_indices]
-        new_image_annos.append(img_filtered_annotations)
-    return new_image_annos
-
-
-def filter_annos_low_height(image_annos, thresh):
-    new_image_annos = []
-    for anno in image_annos:
-        img_filtered_annotations = {}
-        relevant_annotation_indices = [
-            i for i, s in enumerate(anno["bbox"]) if (s[3] - s[1]) >= thresh
-        ]
-        for key in anno.keys():
-            img_filtered_annotations[key] = anno[key][relevant_annotation_indices]
-        new_image_annos.append(img_filtered_annotations)
-    return new_image_annos
-
-
-def filter_empty_annos(image_annos):
-    new_image_annos = []
-    for anno in image_annos:
-        if anno["name"].shape[0] > 0:
-            new_image_annos.append(anno.copy())
-
-    return new_image_annos
-
-
-def kitti_result_line(result_dict, precision=4):
-    prec_float = "{" + ":.{}f".format(precision) + "}"
-    res_line = []
-    all_field_default = OrderedDict(
-        [
-            ("name", None),
-            ("truncated", -1),
-            ("occluded", -1),
-            ("alpha", -10),
-            ("bbox", None),
-            ("dimensions", [-1, -1, -1]),
-            ("location", [-1000, -1000, -1000]),
-            ("rotation_y", -10),
-            ("score", 0.0),
-        ]
-    )
-    res_dict = [(key, None) for key, val in all_field_default.items()]
-    res_dict = OrderedDict(res_dict)
-    for key, val in result_dict.items():
-        if all_field_default[key] is None and val is None:
-            raise ValueError("you must specify a value for {}".format(key))
-        res_dict[key] = val
-
-    for key, val in res_dict.items():
-        if key == "name":
-            res_line.append(val)
-        elif key in ["truncated", "alpha", "rotation_y", "score"]:
-            if val is None:
-                res_line.append(str(all_field_default[key]))
-            else:
-                res_line.append(prec_float.format(val))
-        elif key == "occluded":
-            if val is None:
-                res_line.append(str(all_field_default[key]))
-            else:
-                res_line.append("{}".format(val))
-        elif key in ["dimensions"]:
-            if val is None:
-                res_line += [str(v) for v in all_field_default[key]]
-            else:
-                val = [val[1], val[2], val[0]]
-                res_line += [prec_float.format(v) for v in val]
-        elif key in ["bbox", "location"]:
-            if val is None:
-                res_line += [str(v) for v in all_field_default[key]]
-            else:
-                res_line += [prec_float.format(v) for v in val]
-        else:
-            raise ValueError("unknown key. supported key:{}".format(res_dict.keys()))
-    return " ".join(res_line)
-
-
-def annos_to_kitti_label(annos):
-    num_instance = len(annos["name"])
-    result_lines = []
-    for i in range(num_instance):
-        result_dict = {
-            "name": annos["name"][i],
-            "truncated": annos["truncated"][i],
-            "occluded": annos["occluded"][i],
-            "alpha": annos["alpha"][i],
-            "bbox": annos["bbox"][i],
-            "dimensions": annos["dimensions"][i],
-            "location": annos["location"][i],
-            "rotation_y": annos["rotation_y"][i],
-            "score": annos["score"][i],
-        }
-        line = kitti_result_line(result_dict)
-        result_lines.append(line)
-    return result_lines
-
-
-def add_difficulty_to_annos(info):
-    min_height = [40, 25, 25]  # minimum height for evaluated groundtruth/detections
-    max_occlusion = [
-        0,
-        1,
-        2,
-    ]  # maximum occlusion level of the groundtruth used for evaluation
-    max_trunc = [
-        0.15,
-        0.3,
-        0.5,
-    ]  # maximum truncation level of the groundtruth used for evaluation
-    annos = info["annos"]
-    dims = annos["dimensions"]  # lhw format
-    bbox = annos["bbox"]
-    height = bbox[:, 3] - bbox[:, 1]
-    occlusion = annos["occluded"]
-    truncation = annos["truncated"]
-    diff = []
-    easy_mask = np.ones((len(dims),), dtype=np.bool)
-    moderate_mask = np.ones((len(dims),), dtype=np.bool)
-    hard_mask = np.ones((len(dims),), dtype=np.bool)
-    i = 0
-    for h, o, t in zip(height, occlusion, truncation):
-        if o > max_occlusion[0] or h <= min_height[0] or t > max_trunc[0]:
-            easy_mask[i] = False
-        if o > max_occlusion[1] or h <= min_height[1] or t > max_trunc[1]:
-            moderate_mask[i] = False
-        if o > max_occlusion[2] or h <= min_height[2] or t > max_trunc[2]:
-            hard_mask[i] = False
-        i += 1
-    is_easy = easy_mask
-    is_moderate = np.logical_xor(easy_mask, moderate_mask)
-    is_hard = np.logical_xor(hard_mask, moderate_mask)
-
-    for i in range(len(dims)):
-        if is_easy[i]:
-            diff.append(0)
-        elif is_moderate[i]:
-            diff.append(1)
-        elif is_hard[i]:
-            diff.append(2)
-        else:
-            diff.append(-1)
-    annos["difficulty"] = np.array(diff, np.int32)
-    return diff
-
-
-def add_difficulty_to_annos_v2(info):
-    min_height = [40, 25, 25]  # minimum height for evaluated groundtruth/detections
-    max_occlusion = [
-        0,
-        1,
-        2,
-    ]  # maximum occlusion level of the groundtruth used for evaluation
-    max_trunc = [
-        0.15,
-        0.3,
-        0.5,
-    ]  # maximum truncation level of the groundtruth used for evaluation
-    annos = info["annos"]
-    dims = annos["dimensions"]  # lhw format
-    bbox = annos["bbox"]
-    height = bbox[:, 3] - bbox[:, 1]
-    occlusion = annos["occluded"]
-    truncation = annos["truncated"]
-    diff = []
-    easy_mask = not (
-        (occlusion > max_occlusion[0])
-        or (height < min_height[0])
-        or (truncation > max_trunc[0])
-    )
-    moderate_mask = not (
-        (occlusion > max_occlusion[1])
-        or (height < min_height[1])
-        or (truncation > max_trunc[1])
-    )
-    hard_mask = not (
-        (occlusion > max_occlusion[2])
-        or (height < min_height[2])
-        or (truncation > max_trunc[2])
-    )
-    is_easy = easy_mask
-    is_moderate = np.logical_xor(easy_mask, moderate_mask)
-    is_hard = np.logical_xor(hard_mask, moderate_mask)
-
-    for i in range(len(dims)):
-        if is_easy[i]:
-            diff.append(0)
-        elif is_moderate[i]:
-            diff.append(1)
-        elif is_hard[i]:
-            diff.append(2)
-        else:
-            diff.append(-1)
-    annos["difficulty"] = np.array(diff, np.int32)
-    return diff
-
-
 def get_label_anno(label_path,idx):
+    '''
+    构建label，其中dim,loc,rot应该有3帧的数据
+    return {name": [],
+            "truncated": [],
+            "occluded": [],
+            "alpha": [],
+            "bbox": [],
+            "dimensions": [],
+            "location": [],
+            "rotation_y": [],
+            "dimensions_1": [],
+            "location_1": [],
+            "rotation_y_1": [],
+            "dimensions_2": [],
+            "location_2": [],
+            "rotation_y_2": [],
+            "token":idx,}
+    '''
     annotations = {}
     annotations.update(
         {
@@ -767,12 +315,11 @@ def get_label_anno(label_path,idx):
     )
     with open(label_path, "r") as f:
         lines = f.readlines()
-    # if len(lines) == 0 or len(lines[0]) < 15:
-    #     content = []
-    # else:
     content = [line.strip().split(" ") for line in lines]
-    num_objects = len([x[0] for x in content if float(x[0]) == 1])
-    annotations["name"] = np.array(["Pedestrian" for x in content if float(x[0]) == 1])
+
+    name = ['','Pedestrian','DontCare']
+    num_objects = len([x[0] for x in content if float(x[0]) != -1])
+    annotations["name"] = np.array([name[int(float(x[0]))] for x in content])
     num_gt = len(annotations["name"])
     annotations["truncated"] = np.zeros((num_gt,))
     annotations["occluded"] = np.zeros((num_gt,))
@@ -789,26 +336,24 @@ def get_label_anno(label_path,idx):
         [[float(info) for info in x[4:7]] for x in content]
     ).reshape(-1, 3)
     annotations["rotation_y"] = np.array([float(x[7]) for x in content]).reshape(-1)
+    # 之前一帧的对应标注
+    annotations["dimensions_1"] = np.array(
+        [[float(x[2+9]),float(x[1+9]),float(x[3+9])] for x in content]
+    ).reshape(-1, 3)
+    annotations["location_1"] = np.array(
+        [[float(info) for info in x[(4+9):(7+9)]] for x in content]
+    ).reshape(-1, 3)
+    annotations["rotation_y_1"] = np.array([float(x[7+9]) for x in content]).reshape(-1)
+
+    annotations["dimensions_2"] = np.array(
+        [[float(x[2+9*2]),float(x[1+9*2]),float(x[3+9*2])] for x in content]
+    ).reshape(-1, 3)
+    annotations["location_2"] = np.array(
+        [[float(info) for info in x[(4+9*2):(7+9*2)]] for x in content]
+    ).reshape(-1, 3)
+    annotations["rotation_y_2"] = np.array([float(x[7+9*2]) for x in content]).reshape(-1)
     index = list(range(num_objects)) + [-1] * (num_gt - num_objects)
-    annotations["index"] = np.array(index, dtype=np.int32)
     annotations["group_ids"] = np.arange(num_gt, dtype=np.int32)
-    return annotations
-
-
-def get_pseudo_label_anno():
-    annotations = {}
-    annotations.update(
-        {
-            "name": np.array(["Car"]),
-            "truncated": np.array([0.0]),
-            "occluded": np.array([0]),
-            "alpha": np.array([0.0]),
-            "bbox": np.array([[0.1, 0.1, 15.0, 15.0]]),
-            "dimensions": np.array([[0.1, 0.1, 15.0, 15.0]]),
-            "location": np.array([[0.1, 0.1, 15.0]]),
-            "rotation_y": np.array([[0.1, 0.1, 15.0]]),
-        }
-    )
     return annotations
 
 
@@ -825,6 +370,12 @@ def get_start_result_anno():
             "dimensions": [],
             "location": [],
             "rotation_y": [],
+            "dimensions_1": [],
+            "location_1": [],
+            "rotation_y_1": [],
+            "dimensions_2": [],
+            "location_2": [],
+            "rotation_y_2": [],
             "score": [],
         }
     )

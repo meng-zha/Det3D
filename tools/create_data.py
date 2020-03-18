@@ -38,7 +38,7 @@ def lyft_data_prep(root_path, version="trainval"):
 
 def lvx_data_prep(root_path):
     lvx_ds.create_lvx_info_file(root_path)
-    lvx_ds.create_reduced_point_cloud(root_path)
+    # lvx_ds.create_reduced_point_cloud(root_path)
     create_groundtruth_database(
         "LVX", root_path, Path(root_path) / "lvx_infos_train.pkl"
     )

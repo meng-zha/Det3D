@@ -68,6 +68,9 @@ class Preprocess(object):
 
             gt_dict = {
                 "gt_boxes": anno_dict["boxes"],
+                # 加入之前之后一帧的boxes
+                "gt_boxes_1": anno_dict["boxes_1"],
+                "gt_boxes_2": anno_dict["boxes_2"],
                 "gt_names": np.array(anno_dict["names"]).reshape(-1),
             }
 
@@ -137,6 +140,7 @@ class Preprocess(object):
                 _dict_select(gt_dict, keep_mask)
             gt_dict.pop("difficulty")
 
+            # 保证每个box内点的数量
             if self.min_points_in_gt > 0:
                 # points_count_rbbox takes 10ms with 10 sweeps nuscenes data
                 point_counts = box_np_ops.points_count_rbbox(
@@ -149,7 +153,10 @@ class Preprocess(object):
                 [n in self.class_names for n in gt_dict["gt_names"]], dtype=np.bool_
             )
 
+            # 数据增广暂时去掉，有点改不过来
             if self.db_sampler:
+                pass
+                assert NotImplementedError
                 sampled_dict = self.db_sampler.sample_all(
                     res["metadata"]["image_prefix"],
                     gt_dict["gt_boxes"],
@@ -180,38 +187,42 @@ class Preprocess(object):
                         points = points[np.logical_not(masks.any(-1))]
 
                     points = np.concatenate([sampled_points, points], axis=0)
-            prep.noise_per_object_v3_(
-                gt_dict["gt_boxes"],
-                points,
-                gt_boxes_mask,
-                rotation_perturb=self.gt_rotation_noise,
-                center_noise_std=self.gt_loc_noise_std,
-                global_random_rot_range=self.global_random_rot_range,
-                group_ids=None,
-                num_try=100,
-            )
+            # 暂时不加扰动了
+            # prep.noise_per_object_v3_(
+            #     gt_dict["gt_boxes"],
+            #     points,
+            #     gt_boxes_mask,
+            #     rotation_perturb=self.gt_rotation_noise,
+            #     center_noise_std=self.gt_loc_noise_std,
+            #     global_random_rot_range=self.global_random_rot_range,
+            #     group_ids=None,
+            #     num_try=100,
+            # )
 
             _dict_select(gt_dict, gt_boxes_mask)
 
+            # 将类别转换为index
             gt_classes = np.array(
                 [self.class_names.index(n) + 1 for n in gt_dict["gt_names"]],
                 dtype=np.int32,
             )
             gt_dict["gt_classes"] = gt_classes
 
-            gt_dict["gt_boxes"], points = prep.random_flip(gt_dict["gt_boxes"], points)
-            gt_dict["gt_boxes"], points = prep.global_rotation(
-                gt_dict["gt_boxes"], points, rotation=self.global_rotation_noise
-            )
-            gt_dict["gt_boxes"], points = prep.global_scaling_v2(
-                gt_dict["gt_boxes"], points, *self.global_scaling_noise
-            )
+            # 所有的预处理暂时都不需要
+            # gt_dict["gt_boxes"], points = prep.random_flip(gt_dict["gt_boxes"], points)
+            # gt_dict["gt_boxes"], points = prep.global_rotation(
+            #     gt_dict["gt_boxes"], points, rotation=self.global_rotation_noise
+            # )
+            # gt_dict["gt_boxes"], points = prep.global_scaling_v2(
+            #     gt_dict["gt_boxes"], points, *self.global_scaling_noise
+            # )
 
         if self.shuffle_points:
             # shuffle is a little slow.
             np.random.shuffle(points)
 
         if self.mode == "train" and self.random_select:
+            # 进行点的随机采样，暂时不需要
             if self.npoints < points.shape[0]:
                 pts_depth = points[:, 2]
                 pts_near_flag = pts_depth < 40.0
@@ -340,30 +351,37 @@ class AssignTarget(object):
 
     def __call__(self, res, info):
 
+        # 需要检测的物体类别
         class_names_by_task = [t.classes for t in self.target_assigners]
 
         # Calculate output featuremap size
         grid_size = res["lidar"]["voxels"]["shape"]
         feature_map_size = grid_size[:2] // self.out_size_factor
-        feature_map_size = [*feature_map_size, 1][::-1]
+        feature_map_size = [*feature_map_size, 1][::-1] # z轴的size是1
 
+        # 生成不同类的不同anchor
+        # anchors list
         anchors_by_task = [
             t.generate_anchors(feature_map_size) for t in self.target_assigners
         ]
+        # anchors 类别有dict
         anchor_dicts_by_task = [
             t.generate_anchors_dict(feature_map_size) for t in self.target_assigners
         ]
+        # reshape乘n*7的形式
         reshaped_anchors_by_task = [
             t["anchors"].reshape([-1, t["anchors"].shape[-1]]) for t in anchors_by_task
         ]
         matched_by_task = [t["matched_thresholds"] for t in anchors_by_task]
         unmatched_by_task = [t["unmatched_thresholds"] for t in anchors_by_task]
 
+        # bev下的anchor
         bv_anchors_by_task = [
             box_np_ops.rbbox2d_to_near_bbox(anchors[:, [0, 1, 3, 4, -1]])
             for anchors in reshaped_anchors_by_task
         ]
 
+        # 整合为字典
         anchor_caches_by_task = dict(
             anchors=reshaped_anchors_by_task,
             anchors_bv=bv_anchors_by_task,
@@ -373,10 +391,12 @@ class AssignTarget(object):
         )
 
         if res["mode"] == "train":
+            # 得到当前帧的标注
             gt_dict = res["lidar"]["annotations"]
 
             task_masks = []
             flag = 0
+            # 不同任务的不同类gt，得到mask,task_id:[]
             for class_name in class_names_by_task:
                 task_masks.append(
                     [
@@ -388,33 +408,54 @@ class AssignTarget(object):
                 )
                 flag += len(class_name)
 
+            # task存储
             task_boxes = []
+            task_boxes_1 = []
+            task_boxes_2 = []
             task_classes = []
             task_names = []
             flag2 = 0
             for idx, mask in enumerate(task_masks):
                 task_box = []
+                task_box_1 = []
+                task_box_2 = []
                 task_class = []
                 task_name = []
                 for m in mask:
+                    # mask 应用
+                    # TODO: 在这里应用mask时需要把前后两帧的label加入
                     task_box.append(gt_dict["gt_boxes"][m])
+                    task_box_1.append(gt_dict["gt_boxes_1"][m])
+                    task_box_2.append(gt_dict["gt_boxes_2"][m])
                     task_class.append(gt_dict["gt_classes"][m] - flag2)
                     task_name.append(gt_dict["gt_names"][m])
                 task_boxes.append(np.concatenate(task_box, axis=0))
+                task_boxes_1.append(np.concatenate(task_box_1, axis=0))
+                task_boxes_2.append(np.concatenate(task_box_2, axis=0))
                 task_classes.append(np.concatenate(task_class))
                 task_names.append(np.concatenate(task_name))
                 flag2 += len(mask)
 
-            for task_box in task_boxes:
+            for task_box,task_box_1,task_box_2  in zip(task_boxes,task_boxes_1,task_boxes_2):
+                # TODO:将朝向角限制在-pi~pi
                 # limit rad to [-pi, pi]
                 task_box[:, -1] = box_np_ops.limit_period(
                     task_box[:, -1], offset=0.5, period=np.pi * 2
                 )
+                task_box_1[:, -1] = box_np_ops.limit_period(
+                    task_box_1[:, -1], offset=0.5, period=np.pi * 2
+                )
+                task_box_2[:, -1] = box_np_ops.limit_period(
+                    task_box_2[:, -1], offset=0.5, period=np.pi * 2
+                )
 
             # print(gt_dict.keys())
+            # 对应的gt_boxes_1
             gt_dict["gt_classes"] = task_classes
             gt_dict["gt_names"] = task_names
             gt_dict["gt_boxes"] = task_boxes
+            gt_dict["gt_boxes_1"] = task_boxes_1
+            gt_dict["gt_boxes_2"] = task_boxes_2
 
             res["lidar"]["annotations"] = gt_dict
 
@@ -423,9 +464,11 @@ class AssignTarget(object):
         anchors_dicts = anchor_caches_by_task["anchors_dict"]
 
         example = {}
+        # anchor是reshape出来的D*H*W*7
         example["anchors"] = anchorss
 
         if self.anchor_area_threshold >= 0:
+            # 暂时没有用到
             example["anchors_mask"] = []
             for idx, anchors_bv in enumerate(anchors_bvs):
                 anchors_mask = None
@@ -444,14 +487,18 @@ class AssignTarget(object):
 
         if res["mode"] == "train":
             targets_dicts = []
+            # 主体部分，利用anchors和gt_boxes得到target
+            # TODO: 修改的核心部分
             for idx, target_assigner in enumerate(self.target_assigners):
                 if "anchors_mask" in example:
                     anchors_mask = example["anchors_mask"][idx]
                 else:
                     anchors_mask = None
-                targets_dict = target_assigner.assign_v2(
+                targets_dict = target_assigner.assign_v3(
                     anchors_dicts[idx],
                     gt_dict["gt_boxes"][idx],
+                    gt_dict["gt_boxes_1"][idx],
+                    gt_dict["gt_boxes_2"][idx],
                     anchors_mask,
                     gt_classes=gt_dict["gt_classes"][idx],
                     gt_names=gt_dict["gt_names"][idx],
@@ -465,6 +512,12 @@ class AssignTarget(object):
                     ],
                     "reg_targets": [
                         targets_dict["bbox_targets"] for targets_dict in targets_dicts
+                    ],
+                    "reg_targets_1": [
+                        targets_dict["bbox_targets_1"] for targets_dict in targets_dicts
+                    ],
+                    "reg_targets_2": [
+                        targets_dict["bbox_targets_2"] for targets_dict in targets_dicts
                     ],
                     "reg_weights": [
                         targets_dict["bbox_outside_weights"]

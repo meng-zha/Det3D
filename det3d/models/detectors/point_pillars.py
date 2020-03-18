@@ -30,24 +30,41 @@ class PointPillars(SingleStageDetector):
         return x
 
     def forward(self, example, return_loss=True, **kwargs):
-        voxels = example["voxels"]
-        coordinates = example["coordinates"]
-        num_points_in_voxel = example["num_points"]
-        num_voxels = example["num_voxels"]
+        def extract(example,idx):
+            '''
+            在example中重复3次 pfn网络，提取时域的特征
+            '''
+            voxels = example["voxels"]
+            coordinates = example["coordinates"]
+            num_points_in_voxel = example["num_points"]
+            num_voxels = example["num_voxels"]
 
-        batch_size = len(num_voxels)
+            if idx == 1 or idx ==2:
+                voxels = example[f"voxels_{idx}"]
+                coordinates = example[f"coordinates_{idx}"]
+                num_points_in_voxel = example[f"num_points_{idx}"]
+                num_voxels = example[f"num_voxels_{idx}"]
 
-        data = dict(
-            features=voxels,
-            num_voxels=num_points_in_voxel,
-            coors=coordinates,
-            batch_size=batch_size,
-            input_shape=example["shape"][0],
-        )
+            batch_size = len(num_voxels)
 
-        x = self.extract_feat(data)
+            data = dict(
+                features=voxels,
+                num_voxels=num_points_in_voxel,
+                coors=coordinates,
+                batch_size=batch_size,
+                input_shape=example["shape"][0],
+            )
+
+            x = self.extract_feat(data)
+            return x
+        time_series0 = extract(example,0)
+        time_series1 = extract(example,1)
+        time_series2 = extract(example,2)
+
+        import torch
+        x = torch.cat([time_series0,time_series1,time_series2],dim=1)
+
         preds = self.bbox_head(x)
-        # import pdb; pdb.set_trace()
 
         if return_loss:
             return self.bbox_head.loss(example, preds)

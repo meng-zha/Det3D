@@ -1,4 +1,3 @@
-# TODO: lvx dataset 类
 import numpy as np
 import pickle
 import os
@@ -17,8 +16,7 @@ from .lvx_vis import lvx_vis
 @DATASETS.register_module
 class LvxDataset(PointCloudDataset):
 
-    # NumPointFeatures = 3
-    NumPointFeatures = 6
+    NumPointFeatures = 3
 
     def __init__(
         self,
@@ -50,7 +48,7 @@ class LvxDataset(PointCloudDataset):
         if not hasattr(self, "_lvx_infos"):
             self._lvx_infos = self.load_infos(self._info_path)
 
-        return len(self._lvx_infos)
+        return len(self._lvx_infos)-2
 
     @property
     def num_point_features(self):
@@ -67,17 +65,18 @@ class LvxDataset(PointCloudDataset):
 
     def convert_detection_to_lvx_annos(self, detection):
         class_names = self._class_names
-        # det_image_idxes = [k for k in detection.keys()]
         gt_image_idxes = [str(info["token"]) for info in self._lvx_infos]
-        # print(f"det_image_idxes: {det_image_idxes[:10]}")
-        # print(f"gt_image_idxes: {gt_image_idxes[:10]}")
         annos = []
-        # for det_idx in range(len(detection)):
+        # 前两帧不检测
+        gt_image_idxes.pop(0)
+        gt_image_idxes.pop(0)
         for det_idx in gt_image_idxes:
             det = detection[det_idx]
             info = self._lvx_infos[gt_image_idxes.index(det_idx)]
             # info = self._lvx_infos[det_idx]
             final_box_preds = det["box3d_lidar"].detach().cpu().numpy()
+            final_box_preds_1 = det["box3d_lidar_1"].detach().cpu().numpy()
+            final_box_preds_2 = det["box3d_lidar_2"].detach().cpu().numpy()
             label_preds = det["label_preds"].detach().cpu().numpy()
             scores = det["scores"].detach().cpu().numpy()
 
@@ -88,26 +87,12 @@ class LvxDataset(PointCloudDataset):
                 final_box_preds[:, -1] = box_np_ops.limit_period(
                     final_box_preds[:, -1], offset=0.5, period=np.pi * 2,
                 )
-                final_box_preds[:, 2] -= final_box_preds[:, 5] / 2
-
-                # aim: x, y, z, w, l, h, r -> -y, -z, x, h, w, l, r
-                # (x, y, z, w, l, h r) in lidar -> (x', y', z', l, h, w, r) in camera
-                # box3d_camera = box_np_ops.box_lidar_to_camera(
-                #     final_box_preds, rect, Trv2c
-                # )
-                # camera_box_origin = [0.5, 1.0, 0.5]
-                # box_corners = box_np_ops.center_to_corner_box3d(
-                #     box3d_camera[:, :3],
-                #     box3d_camera[:, 3:6],
-                #     box3d_camera[:, 6],
-                #     camera_box_origin,
-                #     axis=1,
-                # )
-                # box_corners_in_image = box_np_ops.project_to_image(box_corners, P2)
-                # box_corners_in_image: [N, 8, 2]
-                # minxy = np.min(box_corners_in_image, axis=1)
-                # maxxy = np.max(box_corners_in_image, axis=1)
-                # bbox = np.concatenate([minxy, maxxy], axis=1)
+                final_box_preds_1[:, -1] = box_np_ops.limit_period(
+                    final_box_preds_1[:, -1], offset=0.5, period=np.pi * 2,
+                )
+                final_box_preds_2[:, -1] = box_np_ops.limit_period(
+                    final_box_preds_2[:, -1], offset=0.5, period=np.pi * 2,
+                )
                 bbox = np.asarray([0,0,500,500])
                 for j in range(final_box_preds.shape[0]):
                     anno["bbox"].append(bbox)
@@ -115,6 +100,12 @@ class LvxDataset(PointCloudDataset):
                     anno["dimensions"].append(final_box_preds[j, 3:6])
                     anno["location"].append(final_box_preds[j, :3])
                     anno["rotation_y"].append(final_box_preds[j, 6])
+                    anno["dimensions_1"].append(final_box_preds_1[j, 3:6])
+                    anno["location_1"].append(final_box_preds_1[j, :3])
+                    anno["rotation_y_1"].append(final_box_preds_1[j, 6])
+                    anno["dimensions_2"].append(final_box_preds_2[j, 3:6])
+                    anno["location_2"].append(final_box_preds_2[j, :3])
+                    anno["rotation_y_2"].append(final_box_preds_2[j, 6])
                     anno["name"].append(class_names[int(label_preds[j])])
                     anno["truncated"].append(0.0)
                     anno["occluded"].append(0)
@@ -138,6 +129,8 @@ class LvxDataset(PointCloudDataset):
         the z axis and box z center.
         """
         gt_annos = self.ground_truth_annotations
+        if gt_annos is not None:
+            gt_annos = gt_annos[2:]
         dt_annos = self.convert_detection_to_lvx_annos(detections)
 
         if vis:
@@ -168,8 +161,10 @@ class LvxDataset(PointCloudDataset):
     def __getitem__(self, idx):
         return self.get_sensor_data(idx)
 
-    def get_sensor_data(self, idx):
-
+    def process(self,idx):
+        ''' 
+        单帧点云的预处理
+        '''
         info = self._lvx_infos[idx]
 
         res = {
@@ -187,5 +182,20 @@ class LvxDataset(PointCloudDataset):
         }
 
         data, _ = self.pipeline(res, info)
+        return data
+
+    def get_sensor_data(self, idx):
+
+        # 取当前帧及之前两帧的点云
+        idx += 2
+        
+        # 网络的输入为 3*data
+        data = self.process(idx)
+        for i in [idx-1,idx-2]:
+            data_tmp = self.process(i)
+            data[f'voxels_{idx-i}'] = data_tmp['voxels']
+            data[f'coordinates_{idx-i}'] = data_tmp['coordinates']
+            data[f'num_points_{idx-i}'] = data_tmp['num_points']
+            data[f'num_voxels_{idx-i}'] = data_tmp['num_voxels']
 
         return data

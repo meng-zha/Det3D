@@ -80,10 +80,10 @@ def create_groundtruth_database(
     group_counter = 0
 
     # def prepare_single_data(index):
-    for index in tqdm(range(len(dataset))):
+    for index in tqdm(range(len(dataset)+2)):
         image_idx = index
         # modified to nuscenes
-        sensor_data = dataset.get_sensor_data(index)
+        sensor_data = dataset.process(index)
         # for nsweep, sensor_data in enumerate(sensor_datas):
         if "image_idx" in sensor_data["metadata"]:
             image_idx = sensor_data["metadata"]["image_idx"]
