@@ -8,6 +8,7 @@ import pyqtgraph as pg
 import pyqtgraph.opengl as gl
 import argparse
 import open3d as o3d
+import cv2
 
 
 class Object3d(object):
@@ -46,6 +47,10 @@ class Object3d(object):
         self.rz = annos["rotation_y"][idx]  # yaw angle (around Y-axis in camera coordinates) [-pi..pi]
         self.rz_1 = annos["rotation_y_1"][idx]  # yaw angle (around Y-axis in camera coordinates) [-pi..pi]
         self.rz_2 = annos["rotation_y_2"][idx]  # yaw angle (around Y-axis in camera coordinates) [-pi..pi]
+
+        self.track = -1
+        if "track_id" in annos.keys():
+            self.track = annos["track_id"][idx]
 
     def print_object(self):
         print(
@@ -319,7 +324,7 @@ def show_bev_objects(lidar,lidar_1,lidar_2,gt_objects,dt_objects,output_dir):
         ori3d_pts_3d = compute_orientation_3d(obj)
         x1, y1, z1 = ori3d_pts_3d[0, :]
         x2, y2, z2 = ori3d_pts_3d[1, :]
-        plt.text(x1,y1,f"{obj.h:.1f},{obj.rz:.1f}",c='k',fontsize=3)
+        plt.text(x1,y1,f"track={int(obj.track)}",c='k',fontsize=3)
         plt.plot([x1, x2], [y1, y2],linewidth=0.3,color='k')
 
     if gt_objects == []:
@@ -346,6 +351,8 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
         dataset = lvx_object(root_path)
         # 前两帧不做检测
         gt_image_idxes = [str(info["token"]) for info in gt_annos]
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        vot = cv2.VideoWriter(os.path.join(output_dir,"beicao_imgs/video.mp4"),fourcc,10,(3200,2400),True)
         for idx in gt_image_idxes:
             points = dataset.get_lidar(idx)
             points = points[points[:,1]<60,:]
@@ -378,9 +385,14 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
             img_path = os.path.join(output_dir,f"bev_imgs/lvx_{idx}.png")
 
             show_bev_objects(points,points_1,points_2,gt_objects,dt_objects,img_path)
+            img = cv2.imread(img_path)
+            vot.write(img)
+        vot.release()
     
     else:
         dataset = lvx_object(root_path,split="testing")
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        vot = cv2.VideoWriter(os.path.join(output_dir,"beicao_imgs/video.mp4"),fourcc,10,(3200,2400),True)
         for dt_anno in dt_annos:
             idx = dt_anno['metadata']['token']
 
@@ -413,6 +425,9 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
             img_path = os.path.join(output_dir,f"beicao_imgs/lvx_{idx}.png")
 
             show_bev_objects(points,points_1,points_2,[],dt_objects,img_path)
+            img = cv2.imread(img_path)
+            vot.write(img)
+        vot.release()
     
 
 

@@ -11,6 +11,7 @@ from det3d.datasets.registry import DATASETS
 from .lvx_common import *
 from .eval import get_official_eval_result
 from .lvx_vis import lvx_vis
+from .lvx_track import lvx_track
 
 
 @DATASETS.register_module
@@ -133,28 +134,39 @@ class LvxDataset(PointCloudDataset):
             gt_annos = gt_annos[2:]
         dt_annos = self.convert_detection_to_lvx_annos(detections)
 
-        if vis:
-            lvx_vis(gt_annos,dt_annos,output_dir)
+        track = True 
+        if track:
+            # 存入跟踪结果
+            # lvx_track(gt_annos)
+            dt_annos = lvx_track(dt_annos)
 
         # firstly convert standard detection to lvx-format dt annos
         z_axis = 2  # KITTI camera format use y as regular "z" axis.
         z_center = 0.5  # KITTI camera box's center is [0.5, 1, 0.5]
         # for regular raw lidar data, z_axis = 2, z_center = 0.5.
 
-        result_official_dict = get_official_eval_result(
-            gt_annos, dt_annos, self._class_names, z_axis=z_axis, z_center=z_center,difficultys=[0]
-        )
+        if gt_annos is not None:
+            result_official_dict = get_official_eval_result(
+                gt_annos, dt_annos, self._class_names, z_axis=z_axis, z_center=z_center,difficultys=[0]
+            )
 
-        results = {
-            "results": {
-                "official": result_official_dict["result"],
-            },
-            "detail": {
-                "eval.lvx": {
-                    "official": result_official_dict["detail"],
-                }
-            },
-        }
+            results = {
+                "results": {
+                    "official": result_official_dict["result"],
+                },
+                "detail": {
+                    "eval.lvx": {
+                        "official": result_official_dict["detail"],
+                    }
+                },
+            }
+        else:
+            results = None
+
+
+        if vis:
+            lvx_vis(gt_annos,dt_annos,output_dir)
+
 
         return results, dt_annos
 
