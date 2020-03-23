@@ -45,7 +45,7 @@ model = dict(
     type="PointPillars",
     pretrained=None,
     reader=dict(
-        num_input_features=6,
+        num_input_features=3,
         type="PillarFeatureNet",
         num_filters=[64],
         with_distance=False,
@@ -119,7 +119,7 @@ test_cfg = dict(
 
 # dataset settings
 dataset_type = "LvxDataset"
-data_root = "/data3/3d_detection/BBOX_x2_Vel"
+data_root = "/data3/3d_detection/BBOX_x2"
 
 db_sampler = dict(
     type="GT-AUG",
@@ -167,7 +167,7 @@ test_preprocessor = dict(
 
 voxel_generator = dict(
     range=[-40, -40, -0.1, 40, 40, 2.0],
-    voxel_size=[0.25, 0.25, 2.0],
+    voxel_size=[80/400., 80/400., 2.0],
     max_points_in_voxel=50,
     max_voxel_num=160000,
 )
@@ -254,7 +254,7 @@ lr_config = dict(
     type="one_cycle", lr_max=3e-3, moms=[0.95, 0.85], div_factor=10.0, pct_start=0.4,
 )
 
-checkpoint_config = dict(interval=5)
+checkpoint_config = dict(interval=2)
 # yapf:disable
 log_config = dict(
     interval=20,
@@ -272,4 +272,4 @@ log_level = "INFO"
 work_dir = "/data/Outputs/det3d_Outputs/Point_Pillars"
 load_from = None
 resume_from = None
-workflow = [("train", 5),("val",1)]
+workflow = [("train", 2),("val",1)]
