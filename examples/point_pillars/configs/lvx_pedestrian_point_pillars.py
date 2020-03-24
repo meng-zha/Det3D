@@ -19,7 +19,7 @@ target_assigner = dict(
     anchor_generators=[
         dict(
             type="anchor_generator_range",
-            sizes=[0.6, 0.8, 1.8],
+            sizes=[0.5, 0.8, 1.8],
             anchor_ranges=[-40, -40.0, 0.9, 40.0, 40.0, 0.9],
             strides=[0.4, 0.4, 0.0], # if generate only 1 z_center, z_stride will be ignored
             offsets=[-39.8, -39.8, 0.9], # origin_offset + strides / 2 TODO: offsets
@@ -53,7 +53,7 @@ model = dict(
     ),
     backbone=dict(type="PointPillarsScatter", ds_factor=1, norm_cfg=norm_cfg,),
     neck=dict(
-        type="RPN",
+        type="RPN_LVX",
         layer_nums=[3, 5, 5],
         ds_layer_strides=[1, 2, 2],
         ds_num_filters=[128, 128, 256],
@@ -77,11 +77,12 @@ model = dict(
             type="NormByNumPositives", pos_cls_weight=1.0, neg_cls_weight=1.0,
         ),
         loss_cls=dict(type="SigmoidFocalLoss", alpha=0.25, gamma=2.0, loss_weight=0.1,),
+        loss_iou=dict(type="DIoULoss", loss_weight=0.0,),
         use_sigmoid_score=True,
         loss_bbox=dict(
             type="WeightedSmoothL1Loss",
             sigma=3.0,
-            code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.5],
+            code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
             codewise=True,
             loss_weight=2.0,
         ),
@@ -167,9 +168,9 @@ test_preprocessor = dict(
 
 voxel_generator = dict(
     range=[-40, -40, -0.1, 40, 40, 2.0],
-    voxel_size=[80./280, 80./280, 2.0],
+    voxel_size=[80./296, 80./296, 2.0],
     max_points_in_voxel=50,
-    max_voxel_num=160000,
+    max_voxel_num=20000,
 )
 
 train_pipeline = [
@@ -254,10 +255,10 @@ lr_config = dict(
     type="one_cycle", lr_max=3e-3, moms=[0.95, 0.85], div_factor=10.0, pct_start=0.4,
 )
 
-checkpoint_config = dict(interval=5)
+checkpoint_config = dict(interval=1)
 # yapf:disable
 log_config = dict(
-    interval=20,
+    interval=50,
     hooks=[
         dict(type="TextLoggerHook"),
         # dict(type='TensorboardLoggerHook')
@@ -265,11 +266,11 @@ log_config = dict(
 )
 # yapf:enable
 # runtime settings
-total_epochs = 150
+total_epochs = 80
 device_ids = range(4)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"
 work_dir = "/data/Outputs/det3d_Outputs/Point_Pillars"
 load_from = None
 resume_from = None
-workflow = [("train", 5),("val",1)]
+workflow = [("train", 1),("val",1)]

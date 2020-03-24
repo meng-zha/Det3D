@@ -3,7 +3,7 @@ from .cross_entropy_loss import CrossEntropyLoss
 from .focal_loss import FocalLoss
 from .ghm_loss import GHMCLoss, GHMRLoss
 
-# from .iou_loss import IoULoss
+from .iou_loss import DIoULoss
 from .mse_loss import MSELoss
 from .accuracy import accuracy
 from .smooth_l1_loss import SmoothL1Loss
@@ -21,6 +21,7 @@ __all__ = [
     "BalancedL1Loss",
     "CrossEntropyLoss",
     "FocalLoss",
+    "DIoULoss",
     "GHMCLoss",
     "MSELoss",
     "SmoothL1Loss",

@@ -275,9 +275,11 @@ def show_bev_objects(lidar,lidar_1,lidar_2,gt_objects,dt_objects,output_dir):
     # colors = [color_map[int(i)] for i in points[:,3]]
     plt.clf()
     # plt.scatter(points[:,0],points[:,1],c=colors ,s=0.1*np.ones((len(points[:,2]),)),linewidth=0.1*np.ones((len(points[:,2]),)))
-    plt.scatter(points[:,0],points[:,1],s=0.3*np.ones((len(points[:,2]),)),linewidth=0.3*np.ones((len(points[:,2]),)))
     plt.scatter(lidar_1[:,0],lidar_1[:,1],c='y',s=0.3*np.ones((len(lidar_1[:,2]),)),linewidth=0.3*np.ones((len(lidar_1[:,2]),)))
-    plt.scatter(lidar_2[:,0],lidar_2[:,1],c='g',s=0.3*np.ones((len(lidar_2[:,2]),)),linewidth=0.3*np.ones((len(lidar_2[:,2]),)))
+    plt.scatter(points[:,0],points[:,1],s=0.3*np.ones((len(points[:,2]),)),linewidth=0.3*np.ones((len(points[:,2]),)))
+    if lidar_2 != []:
+        plt.scatter(lidar_2[:,0],lidar_2[:,1],c='g',s=0.3*np.ones((len(lidar_2[:,2]),)),linewidth=0.3*np.ones((len(lidar_2[:,2]),)))
+
 
     for obj in gt_objects:
         if obj.type == "DontCare":
@@ -308,18 +310,20 @@ def show_bev_objects(lidar,lidar_1,lidar_2,gt_objects,dt_objects,output_dir):
             continue
         # Draw bev bounding box
         box3d_pts_3d = compute_box_3d_track(obj.l,obj.w,obj.h,obj.rz,*obj.t)
+        np.random.seed(int(obj.track))
+        c = np.random.rand(3)
         for k in range(4):
             i, j = k, (k + 1) % 4
-            plt.plot([box3d_pts_3d[i,0],box3d_pts_3d[j,0]],[box3d_pts_3d[i,1],box3d_pts_3d[j,1]],color='r',linewidth=0.3)
+            plt.plot([box3d_pts_3d[i,0],box3d_pts_3d[j,0]],[box3d_pts_3d[i,1],box3d_pts_3d[j,1]],color=c,linewidth=1)
 
-        box3d_pts_3d_1 = compute_box_3d_track(obj.l_1,obj.w_1,obj.h_1,obj.rz_1,*obj.t_1)
-        for k in range(4):
-            i, j = k, (k + 1) % 4
-            plt.plot([box3d_pts_3d_1[i,0],box3d_pts_3d_1[j,0]],[box3d_pts_3d_1[i,1],box3d_pts_3d_1[j,1]],color='gold',linewidth=0.3)
-        box3d_pts_3d_2 = compute_box_3d_track(obj.l_2,obj.w_2,obj.h_2,obj.rz_2,*obj.t_2)
-        for k in range(4):
-            i, j = k, (k + 1) % 4
-            plt.plot([box3d_pts_3d_2[i,0],box3d_pts_3d_2[j,0]],[box3d_pts_3d_2[i,1],box3d_pts_3d_2[j,1]],color='indigo',linewidth=0.3)
+        # box3d_pts_3d_1 = compute_box_3d_track(obj.l_1,obj.w_1,obj.h_1,obj.rz_1,*obj.t_1)
+        # for k in range(4):
+        #     i, j = k, (k + 1) % 4
+        #     plt.plot([box3d_pts_3d_1[i,0],box3d_pts_3d_1[j,0]],[box3d_pts_3d_1[i,1],box3d_pts_3d_1[j,1]],color='gold',linewidth=0.3)
+        # box3d_pts_3d_2 = compute_box_3d_track(obj.l_2,obj.w_2,obj.h_2,obj.rz_2,*obj.t_2)
+        # for k in range(4):
+        #     i, j = k, (k + 1) % 4
+        #     plt.plot([box3d_pts_3d_2[i,0],box3d_pts_3d_2[j,0]],[box3d_pts_3d_2[i,1],box3d_pts_3d_2[j,1]],color='indigo',linewidth=0.3)
         # Draw heading arrow
         ori3d_pts_3d = compute_orientation_3d(obj)
         x1, y1, z1 = ori3d_pts_3d[0, :]
@@ -329,6 +333,10 @@ def show_bev_objects(lidar,lidar_1,lidar_2,gt_objects,dt_objects,output_dir):
 
     if gt_objects == []:
         plt.xlim(-20,20)
+        plt.ylim(-20,20)
+    else:
+        plt.xlim(-40,40)
+        plt.ylim(-40,40)
     plt.rcParams['figure.dpi'] = 500
     plt.rcParams['savefig.dpi'] = 500
     plt.savefig(output_dir)
@@ -352,29 +360,32 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
         # 前两帧不做检测
         gt_image_idxes = [str(info["token"]) for info in gt_annos]
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        vot = cv2.VideoWriter(os.path.join(output_dir,"beicao_imgs/video.mp4"),fourcc,10,(3200,2400),True)
+        vot = cv2.VideoWriter(os.path.join(output_dir,"bev_video.mp4"),fourcc,10,(3200,2400),True)
         for idx in gt_image_idxes:
             points = dataset.get_lidar(idx)
-            points = points[points[:,1]<60,:]
-            points = points[points[:,0]<60,:]
-            points = points[points[:,1]>-60,:]
-            points = points[points[:,0]>-60,:]
+            points = points[points[:,1]<40,:]
+            points = points[points[:,0]<40,:]
+            points = points[points[:,1]>-40,:]
+            points = points[points[:,0]>-40,:]
             points = points[points[:,2]>0.1,:]
 
             points_1 = dataset.get_lidar(f'{int(idx)-1}')
-            points_1 = points_1[points_1[:,1]<60,:]
-            points_1 = points_1[points_1[:,0]<60,:]
-            points_1 = points_1[points_1[:,1]>-60,:]
-            points_1 = points_1[points_1[:,0]>-60,:]
+            points_1 = points_1[points_1[:,1]<40,:]
+            points_1 = points_1[points_1[:,0]<40,:]
+            points_1 = points_1[points_1[:,1]>-40,:]
+            points_1 = points_1[points_1[:,0]>-40,:]
             points_1 = points_1[points_1[:,2]>0.1,:]
             print(points.shape)
 
-            points_2 = dataset.get_lidar(f'{int(idx)+1}')
-            points_2 = points_2[points_2[:,1]<60,:]
-            points_2 = points_2[points_2[:,0]<60,:]
-            points_2 = points_2[points_2[:,1]>-60,:]
-            points_2 = points_2[points_2[:,0]>-60,:]
-            points_2 = points_2[points_2[:,2]>0.1,:]
+            if (gt_image_idxes.index(idx) < len(gt_image_idxes)-1):
+                points_2 = dataset.get_lidar(f'{int(idx)+1}')
+                points_2 = points_2[points_2[:,1]<40,:]
+                points_2 = points_2[points_2[:,0]<40,:]
+                points_2 = points_2[points_2[:,1]>-40,:]
+                points_2 = points_2[points_2[:,0]>-40,:]
+                points_2 = points_2[points_2[:,2]>0.1,:]
+            else:
+                points_2 = []
 
             gt_objects = dataset.get_label_objects(gt_annos[gt_image_idxes.index(idx)])
             dt_objects = dataset.get_label_objects(dt_annos[gt_image_idxes.index(idx)])
@@ -392,31 +403,34 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
     else:
         dataset = lvx_object(root_path,split="testing")
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        vot = cv2.VideoWriter(os.path.join(output_dir,"beicao_imgs/video.mp4"),fourcc,10,(3200,2400),True)
-        for dt_anno in dt_annos:
+        vot = cv2.VideoWriter(os.path.join(output_dir,"beicao_video.mp4"),fourcc,10,(3200,2400),True)
+        for count,dt_anno in enumerate(dt_annos):
             idx = dt_anno['metadata']['token']
 
             points = dataset.get_lidar(idx)
-            points = points[points[:,1]<60,:]
-            points = points[points[:,0]<60,:]
-            points = points[points[:,1]>-60,:]
-            points = points[points[:,0]>-60,:]
+            points = points[points[:,1]<40,:]
+            points = points[points[:,0]<40,:]
+            points = points[points[:,1]>-40,:]
+            points = points[points[:,0]>-40,:]
             points = points[points[:,2]>0.1,:]
             print(points.shape)
 
             points_1 = dataset.get_lidar(f'{int(idx)-1}')
-            points_1 = points_1[points_1[:,1]<60,:]
-            points_1 = points_1[points_1[:,0]<60,:]
-            points_1 = points_1[points_1[:,1]>-60,:]
-            points_1 = points_1[points_1[:,0]>-60,:]
+            points_1 = points_1[points_1[:,1]<40,:]
+            points_1 = points_1[points_1[:,0]<40,:]
+            points_1 = points_1[points_1[:,1]>-40,:]
+            points_1 = points_1[points_1[:,0]>-40,:]
             points_1 = points_1[points_1[:,2]>0.1,:]
 
-            points_2 = dataset.get_lidar(f'{int(idx)+1}')
-            points_2 = points_2[points_2[:,1]<60,:]
-            points_2 = points_2[points_2[:,0]<60,:]
-            points_2 = points_2[points_2[:,1]>-60,:]
-            points_2 = points_2[points_2[:,0]>-60,:]
-            points_2 = points_2[points_2[:,2]>0.1,:]
+            if (count < len(dt_annos)-1):
+                points_2 = dataset.get_lidar(f'{int(idx)+1}')
+                points_2 = points_2[points_2[:,1]<40,:]
+                points_2 = points_2[points_2[:,0]<40,:]
+                points_2 = points_2[points_2[:,1]>-40,:]
+                points_2 = points_2[points_2[:,0]>-40,:]
+                points_2 = points_2[points_2[:,2]>0.1,:]
+            else:
+                points_2 = []
             dt_objects = dataset.get_label_objects(dt_anno)
 
             if not os.path.exists(os.path.join(output_dir,"beicao_imgs")):

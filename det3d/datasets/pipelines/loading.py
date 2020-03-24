@@ -175,11 +175,13 @@ class LoadPointCloudFromFile(object):
 
             pcd = o3d.io.read_point_cloud(str(velo_path))
             points = np.asarray(pcd.points).astype(np.float32)
+            # 将地面的点去除，以减小显存消耗
         
             if np.asarray(pcd.normals).shape[0] != 0:
                 normals_v = np.asarray(pcd.normals)
                 # TODO: num_features
                 points = np.concatenate([points,normals_v],axis=1)[:,:6].astype(np.float32)
+            # points = points[points[:,2]>0.1,:]
 
             res["lidar"]["points"] = points
 

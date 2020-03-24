@@ -194,6 +194,11 @@ def create_loss(
 
     return loc_losses, loc_losses_1,loc_losses_2,cls_losses
 
+def iou_loss(box_preds,reg_targets,iou_loss_ftor,reg_weights):
+    batch_size = int(box_preds.shape[0])
+    box_preds = box_preds.view(batch_size, -1, 7)
+    return iou_loss_ftor(box_preds,reg_targets,reg_weights)
+
 
 class LossNormType(Enum):
     NormByNumPositives = "norm_by_num_positives"
@@ -419,6 +424,7 @@ class MultiGroupHead(nn.Module):
         loss_cls=dict(type="CrossEntropyLoss", use_sigmoid=False, loss_weight=1.0,),
         use_sigmoid_score=True,
         loss_bbox=dict(type="SmoothL1Loss", beta=1.0, loss_weight=1.0,),
+        loss_iou=dict(type="DIoULoss", loss_weight=1.0,),
         encode_rad_error_by_sin=True,
         loss_aux=None,
         direction_offset=0.0,
@@ -448,6 +454,7 @@ class MultiGroupHead(nn.Module):
 
         self.loss_cls = build_loss(loss_cls)
         self.loss_reg = build_loss(loss_bbox)
+        self.loss_iou = build_loss(loss_iou)
         if loss_aux is not None:
             self.loss_aux = build_loss(loss_aux)
 
@@ -646,6 +653,36 @@ class MultiGroupHead(nn.Module):
                 box_code_size=self.box_n_dim,
             )
 
+            # 增加了iou loss
+            # batch_size = batch_anchors[task_id].shape[0]
+            # batch_task_anchors = example["anchors"][task_id].view(
+            #     batch_size, -1, self.box_n_dim
+            # )
+            # batch_box_preds = preds_dict["box_preds"].view(batch_size, -1, self.box_n_dim)
+            # batch_box_preds_1 = preds_dict["box_preds_1"].view(batch_size, -1, self.box_n_dim)
+            # batch_box_preds_2 = preds_dict["box_preds_2"].view(batch_size, -1, self.box_n_dim)
+            # batch_reg_preds = self.box_coder.decode_torch(
+            #     batch_box_preds[:, :, : self.box_coder.code_size], batch_task_anchors
+            # )
+            # targets_preds = self.box_coder.decode_torch(
+            #     reg_targets[:, :, : self.box_coder.code_size], batch_task_anchors
+            # )
+            # iou_loss_reduced = iou_loss(batch_reg_preds,targets_preds,self.loss_iou,reg_weights).sum()/batch_size_device
+            # batch_reg_preds_1 = self.box_coder.decode_torch(
+            #     batch_box_preds_1[:, :, : self.box_coder.code_size], batch_task_anchors
+            # )
+            # targets_preds_1 = self.box_coder.decode_torch(
+            #     reg_targets_1[:, :, : self.box_coder.code_size], batch_task_anchors
+            # )
+            # iou_loss_reduced_1 = iou_loss(batch_reg_preds_1,targets_preds_1,self.loss_iou,reg_weights).sum()/batch_size_device
+            # batch_reg_preds_2 = self.box_coder.decode_torch(
+            #     batch_box_preds_2[:, :, : self.box_coder.code_size], batch_task_anchors
+            # )
+            # targets_preds_2 = self.box_coder.decode_torch(
+            #     reg_targets_2[:, :, : self.box_coder.code_size], batch_task_anchors
+            # )
+            # iou_loss_reduced_2 = iou_loss(batch_reg_preds_2,targets_preds_2,self.loss_iou,reg_weights).sum()/batch_size_device
+
             loc_loss_reduced = loc_loss.sum() / batch_size_device
             loc_loss_reduced *= self.loss_reg._loss_weight
             loc_loss_reduced_1 = loc_loss_1.sum() / batch_size_device
@@ -659,7 +696,9 @@ class MultiGroupHead(nn.Module):
             cls_loss_reduced = cls_loss.sum() / batch_size_device
             cls_loss_reduced *= self.loss_cls._loss_weight
 
+            # loss = loc_loss_reduced + cls_loss_reduced
             loss = loc_loss_reduced + cls_loss_reduced+loc_loss_reduced_1+loc_loss_reduced_2 
+            # loss = loss + iou_loss_reduced+iou_loss_reduced_1+iou_loss_reduced_2
 
             if self.use_direction_classifier:
                 dir_targets = get_direction_target(
@@ -691,6 +730,9 @@ class MultiGroupHead(nn.Module):
                 "loc_loss_reduced": loc_loss_reduced.detach().cpu().mean(),
                 "loc_loss_reduced_1": loc_loss_reduced_1.detach().cpu().mean(),
                 "loc_loss_reduced_2": loc_loss_reduced_2.detach().cpu().mean(),
+                # "iou_loss_reduced":iou_loss_reduced.detach().cpu().mean(),
+                # "iou_loss_reduced_1":iou_loss_reduced_1.detach().cpu().mean(),
+                # "iou_loss_reduced_2":iou_loss_reduced_2.detach().cpu().mean(),
                 "loc_loss_elem": [elem.detach().cpu() for elem in loc_loss_elem],
                 "num_pos": (labels > 0)[0].sum(),
                 "num_neg": (labels == 0)[0].sum(),

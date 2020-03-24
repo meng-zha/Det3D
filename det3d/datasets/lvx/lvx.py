@@ -134,7 +134,7 @@ class LvxDataset(PointCloudDataset):
             gt_annos = gt_annos[2:]
         dt_annos = self.convert_detection_to_lvx_annos(detections)
 
-        track = True 
+        track = False 
         if track:
             # 存入跟踪结果
             # lvx_track(gt_annos)
@@ -164,8 +164,8 @@ class LvxDataset(PointCloudDataset):
             results = None
 
 
-        if vis:
-            lvx_vis(gt_annos,dt_annos,output_dir)
+        # if vis:
+        #     lvx_vis(gt_annos,dt_annos,output_dir)
 
 
         return results, dt_annos

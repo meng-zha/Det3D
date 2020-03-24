@@ -394,6 +394,12 @@ def empty_result_anno():
             "dimensions": np.zeros([0, 3]),
             "location": np.zeros([0, 3]),
             "rotation_y": np.array([]),
+            "dimensions_1": np.zeros([0, 3]),
+            "location_1": np.zeros([0, 3]),
+            "rotation_y_1": np.array([]),
+            "dimensions_2": np.zeros([0, 3]),
+            "location_2": np.zeros([0, 3]),
+            "rotation_y_2": np.array([]),
             "score": np.array([]),
         }
     )
