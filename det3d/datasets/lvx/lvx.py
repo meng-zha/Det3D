@@ -27,8 +27,10 @@ class LvxDataset(PointCloudDataset):
         pipeline=None,
         class_names=None,
         test_mode=False,
+        start_idx = [],
         **kwargs
     ):
+        self._start_idx = start_idx 
         super(LvxDataset, self).__init__(
             root_path, info_path, pipeline, test_mode=test_mode
         )
@@ -38,18 +40,35 @@ class LvxDataset(PointCloudDataset):
         self._num_point_features = __class__.NumPointFeatures
         # print("remain number of infos:", len(self._lvx_infos))
         self._class_names = class_names
+        if self._start_idx == []:
+            self._start_idx=[[0,len(self._lvx_infos)-1]]
+        self._video_times = self.load_videos(self._start_idx)
     
     def load_infos(self,info_path):
         
         with open(self._info_path,"rb") as f:
             return pickle.load(f)
 
-    def __len__(self):
-
+    def load_videos(self,start_idx):
         if not hasattr(self, "_lvx_infos"):
             self._lvx_infos = self.load_infos(self._info_path)
+        if self._start_idx == []:
+            self._start_idx=[[0,len(self._lvx_infos)-1]]
+        video_times = [0]
+        length = 0
+        for video_time in self._start_idx:
+            length += video_time[1]-video_time[0] -2
+            video_times.append(length)
+        return video_times
 
-        return len(self._lvx_infos)-2
+    def __len__(self):
+
+        # if not hasattr(self, "_lvx_infos"):
+        #     self._lvx_infos = self.load_infos(self._info_path)
+        if not hasattr(self, "_video_times"):
+            self._video_times = self.load_videos(self._start_idx)
+
+        return self._video_times[-1]
 
     @property
     def num_point_features(self):
@@ -60,17 +79,21 @@ class LvxDataset(PointCloudDataset):
         if "annos" not in self._lvx_infos[0]:
             return None
 
-        gt_annos = [info["annos"] for info in self._lvx_infos]
+        lvx_infos = []
+        for clips in self._start_idx:
+            lvx_infos.extend(self._lvx_infos[clips[0]+2:clips[1]])
+
+        gt_annos = [info["annos"] for info in lvx_infos]
 
         return gt_annos
 
     def convert_detection_to_lvx_annos(self, detection):
         class_names = self._class_names
-        gt_image_idxes = [str(info["token"]) for info in self._lvx_infos]
+        lvx_infos = []
+        for clips in self._start_idx:
+            lvx_infos.extend(self._lvx_infos[clips[0]+2:clips[1]])
+        gt_image_idxes = [str(info["token"]) for info in lvx_infos]
         annos = []
-        # 前两帧不检测
-        gt_image_idxes.pop(0)
-        gt_image_idxes.pop(0)
         for det_idx in gt_image_idxes:
             det = detection[det_idx]
             info = self._lvx_infos[gt_image_idxes.index(det_idx)]
@@ -130,11 +153,9 @@ class LvxDataset(PointCloudDataset):
         the z axis and box z center.
         """
         gt_annos = self.ground_truth_annotations
-        if gt_annos is not None:
-            gt_annos = gt_annos[2:]
         dt_annos = self.convert_detection_to_lvx_annos(detections)
 
-        track = False 
+        track = True
         if track:
             # 存入跟踪结果
             # lvx_track(gt_annos)
@@ -164,8 +185,8 @@ class LvxDataset(PointCloudDataset):
             results = None
 
 
-        # if vis:
-        #     lvx_vis(gt_annos,dt_annos,output_dir)
+        if vis:
+            lvx_vis(gt_annos,dt_annos,output_dir)
 
 
         return results, dt_annos
@@ -198,8 +219,12 @@ class LvxDataset(PointCloudDataset):
 
     def get_sensor_data(self, idx):
 
+        length = 0
+
         # 取当前帧及之前两帧的点云
-        idx += 2
+        for i,start in enumerate(self._video_times):
+            if idx < start:
+                idx = self._start_idx[i-1][0]+2+idx-self._video_times[i-1]
         
         # 网络的输入为 3*data
         data = self.process(idx)

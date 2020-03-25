@@ -202,6 +202,7 @@ test_pipeline = [
 train_anno = data_root+"/lvx_infos_train.pkl"
 val_anno = data_root+"/lvx_infos_val.pkl"
 test_anno = None
+start_idx = [[0,115],[117,332],[333,560]] # 训练集为三段
 
 data = dict(
     samples_per_gpu=1,
@@ -212,6 +213,7 @@ data = dict(
         info_path=data_root + "/lvx_infos_train.pkl",
         ann_file=train_anno,
         class_names=class_names,
+        start_idx = start_idx,
         pipeline=train_pipeline,
     ),
     val=dict(
