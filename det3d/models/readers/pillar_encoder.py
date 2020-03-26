@@ -173,6 +173,7 @@ class PointPillarsScatter(nn.Module):
         self.nchannels = num_input_features
 
     def forward(self, voxel_features, coords, batch_size, input_shape):
+        torch.cuda.empty_cache()
 
         self.nx = input_shape[0]
         self.ny = input_shape[1]
