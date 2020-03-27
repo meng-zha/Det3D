@@ -5,7 +5,8 @@ import numpy as np
 def lvx_track(annos):
     """ 将上一帧的next预测与当前帧对比，将当前帧的prev预测与上一帧对比 """
     new_id = 0
-    threshold = -0.5
+    threshold = -0.75
+    threshold_2 = -0.25
     
     for i,anno in enumerate(annos):
         if i == 0:
@@ -35,6 +36,23 @@ def lvx_track(annos):
                 predict_pre[:,max_iou[1]] = -1
                 num+=1
             
+            num = 0
+            past_tom = get_track_scores(anno_to_boxes(anno,'_1'),anno_to_boxes(annos[i-2],'_2'))
+            while(num<past_tom.shape[0] and num<past_tom.shape[1]):
+                loc_max = past_tom.argmax()
+                max_iou = [loc_max//past_tom.shape[1],loc_max%past_tom.shape[1]]
+                score = past_tom[max_iou[0],max_iou[1]]
+                if score <  threshold_2:
+                    break
+                if track_ids[max_iou[0]] == -1:
+                    # track_ids 需要没有被占用过
+                    if (track_ids == annos[i-2]['track_id'][max_iou[1]]).sum() == 0:
+                        track_ids[max_iou[0]] = annos[i-2]['track_id'][max_iou[1]]
+                        scores[max_iou[0]] = score
+                past_tom[max_iou[0],:] = -1
+                past_tom[:,max_iou[1]] = -1
+                num+=1
+                            
             for index in range(track_ids.shape[0]):
                 if track_ids[index] == -1:
                     track_ids[index] = new_id

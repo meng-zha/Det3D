@@ -68,7 +68,7 @@ class RPN_LVX(nn.Module):
         deblocks = []
         fusions_1 = []
         fusions_add_1 = []
-        fusions_2 = []
+        # fusions_2 = []
 
         for i, layer_num in enumerate(self._layer_nums):
             block, num_out_filters = self._make_layer(
@@ -116,7 +116,7 @@ class RPN_LVX(nn.Module):
                     nn.Conv3d(
                         self._num_upsample_filters[i-self._upsample_start_idx],
                         self._num_upsample_filters[i-self._upsample_start_idx],
-                        kernel_size=(2,3,3),
+                        kernel_size=(3,3,3),
                         padding=(0,1,1),
                         bias = False, 
                         ),
@@ -201,11 +201,11 @@ class RPN_LVX(nn.Module):
 
         fusion = []
         for i in range(len(self.fusions_1)):
-            temp = self.fusions_1[i](torch.cat([ups[i].unsqueeze(2),ups_1[i].unsqueeze(2)],dim=2))
+            temp = self.fusions_1[i](torch.cat([ups[i].unsqueeze(2),ups_1[i].unsqueeze(2),ups_2[i].unsqueeze(2)],dim=2))
             fusion.append(self.fusions_add_1[i](temp.squeeze(2)))
-            temp_2 = self.fusions_1[i](torch.cat([ups_2[i].unsqueeze(2),ups_1[i].unsqueeze(2)],dim=2))
-            fusion.append(self.fusions_add_1[i](temp_2.squeeze(2)))
-            fusion.append(ups[i])
+            # temp_2 = self.fusions_1[i](torch.cat([ups_2[i].unsqueeze(2),ups_1[i].unsqueeze(2)],dim=2))
+            # fusion.append(self.fusions_add_1[i](temp_2.squeeze(2)))
+            # fusion.append(ups[i])
 
         x = torch.cat(fusion,dim=1)
 

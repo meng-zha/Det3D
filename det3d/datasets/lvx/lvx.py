@@ -161,6 +161,9 @@ class LvxDataset(PointCloudDataset):
             # lvx_track(gt_annos)
             dt_annos = lvx_track(dt_annos)
 
+        if vis:
+            lvx_vis(gt_annos,dt_annos,output_dir)
+
         # firstly convert standard detection to lvx-format dt annos
         z_axis = 2  # KITTI camera format use y as regular "z" axis.
         z_center = 0.5  # KITTI camera box's center is [0.5, 1, 0.5]
@@ -171,9 +174,32 @@ class LvxDataset(PointCloudDataset):
                 gt_annos, dt_annos, self._class_names, z_axis=z_axis, z_center=z_center,difficultys=[0]
             )
 
+            def change_time(gt_annos,dt_annos,time):
+                ''' 评价T-1帧和T+1帧的检测框'''
+                for i in range(len(gt_annos)):
+                    gt_annos[i]['dimensions'] = gt_annos[i][f'dimensions_{time}']
+                    gt_annos[i]['location'] = gt_annos[i][f'location_{time}']
+                    gt_annos[i]['rotation_y'] = gt_annos[i][f'rotation_y_{time}']
+                    dt_annos[i]['dimensions'] = dt_annos[i][f'dimensions_{time}']
+                    dt_annos[i]['location'] = dt_annos[i][f'location_{time}']
+                    dt_annos[i]['rotation_y'] = dt_annos[i][f'rotation_y_{time}']
+                return gt_annos,dt_annos
+
+            gt_annos_1,dt_annos_1 = change_time(gt_annos,dt_annos,1)
+            result_official_dict_1 = get_official_eval_result(
+                gt_annos_1, dt_annos_1, self._class_names, z_axis=z_axis, z_center=z_center,difficultys=[0]
+            )
+
+            gt_annos_2,dt_annos_2 = change_time(gt_annos,dt_annos,2)
+            result_official_dict_2 = get_official_eval_result(
+                gt_annos_2, dt_annos_2, self._class_names, z_axis=z_axis, z_center=z_center,difficultys=[0]
+            )
+
             results = {
                 "results": {
                     "official": result_official_dict["result"],
+                    "official_1": result_official_dict_1["result"],
+                    "official_2": result_official_dict_2["result"],
                 },
                 "detail": {
                     "eval.lvx": {
@@ -183,10 +209,6 @@ class LvxDataset(PointCloudDataset):
             }
         else:
             results = None
-
-
-        if vis:
-            lvx_vis(gt_annos,dt_annos,output_dir)
 
 
         return results, dt_annos

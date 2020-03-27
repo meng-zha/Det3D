@@ -94,8 +94,8 @@ def main():
 
     model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
 
-    dataset = build_dataset(cfg.data.val)
-    # dataset = build_dataset(cfg.data.test)
+    # dataset = build_dataset(cfg.data.val)
+    dataset = build_dataset(cfg.data.test)
     data_loader = build_dataloader(
         dataset,
         batch_size=cfg.data.samples_per_gpu,
