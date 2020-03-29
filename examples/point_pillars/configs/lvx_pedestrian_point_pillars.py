@@ -128,7 +128,7 @@ db_sampler = dict(
     db_info_path=data_root+"/dbinfos_train.pkl",
     sample_groups=[dict(Pedestrian=8,),],
     db_prep_steps=[
-        dict(filter_by_min_num_points=dict(Pedestrian=3,)),
+        dict(filter_by_min_num_points=dict(Pedestrian=0,)),
         dict(filter_by_difficulty=[-1],),
     ],
     global_random_rotation_range_per_object=[0, 0],
@@ -168,7 +168,7 @@ test_preprocessor = dict(
 
 voxel_generator = dict(
     range=[-40, -40, -0.1, 40, 40, 2.0],
-    voxel_size=[80./296, 80./296, 2.0],
+    voxel_size=[80./320, 80./320, 2.0],
     max_points_in_voxel=50,
     max_voxel_num=20000,
 )

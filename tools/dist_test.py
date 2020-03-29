@@ -94,8 +94,8 @@ def main():
 
     model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
 
-    # dataset = build_dataset(cfg.data.val)
-    dataset = build_dataset(cfg.data.test)
+    dataset = build_dataset(cfg.data.val)
+    # dataset = build_dataset(cfg.data.test)
     data_loader = build_dataloader(
         dataset,
         batch_size=cfg.data.samples_per_gpu,
@@ -158,7 +158,7 @@ def main():
     for p in all_predictions:
         predictions.update(p)
 
-    result_dict, _ = dataset.evaluation(predictions, output_dir=args.work_dir,vis=True)
+    result_dict, _ = dataset.evaluation(predictions, output_dir=args.work_dir,vis=True,track=True)
 
     for k, v in result_dict["results"].items():
         print(f"Evaluation {k}: {v}")

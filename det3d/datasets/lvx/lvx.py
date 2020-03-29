@@ -146,19 +146,22 @@ class LvxDataset(PointCloudDataset):
             annos[-1]["metadata"] = det["metadata"]
         return annos
 
-    def evaluation(self, detections, output_dir=None, vis = False):
+    def evaluation(self, detections, output_dir=None, vis = False, track = False):
         """
         detection
         When you want to eval your own dataset, you MUST set correct
         the z axis and box z center.
         """
-        gt_annos = self.ground_truth_annotations
-        dt_annos = self.convert_detection_to_lvx_annos(detections)
 
-        track = True
+        import copy
+
+        gt_source = self.ground_truth_annotations
+        gt_annos = copy.deepcopy(gt_source)
+        dt_source = self.convert_detection_to_lvx_annos(detections)
+        dt_annos = copy.deepcopy(dt_source)
+
         if track:
             # 存入跟踪结果
-            # lvx_track(gt_annos)
             dt_annos = lvx_track(dt_annos)
 
         if vis:
