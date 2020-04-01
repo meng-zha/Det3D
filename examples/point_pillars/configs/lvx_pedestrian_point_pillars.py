@@ -126,9 +126,9 @@ db_sampler = dict(
     type="GT-AUG",
     enable=True,
     db_info_path=data_root+"/dbinfos_train.pkl",
-    sample_groups=[dict(Pedestrian=8,),],
+    sample_groups=[dict(Pedestrian=0,),],
     db_prep_steps=[
-        dict(filter_by_min_num_points=dict(Pedestrian=0,)),
+        dict(filter_by_min_num_points=dict(Pedestrian=1,)),
         dict(filter_by_difficulty=[-1],),
     ],
     global_random_rotation_range_per_object=[0, 0],

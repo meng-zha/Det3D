@@ -235,7 +235,6 @@ class LvxDataset(PointCloudDataset):
                 "num_point_features": LvxDataset.NumPointFeatures,
                 "token":str(info["token"]),
             },
-            "calib": None,
             "mode": "val" if self.test_mode else "train",
         }
 
@@ -250,14 +249,69 @@ class LvxDataset(PointCloudDataset):
         for i,start in enumerate(self._video_times):
             if idx < start:
                 idx = self._start_idx[i-1][0]+2+idx-self._video_times[i-1]
-        
+
+        info = self._lvx_infos[idx]
+        info_1 = self._lvx_infos[idx-1]
+        info_2 = self._lvx_infos[idx-2]
+
+        res = {
+            "lidar": {
+                "type": "lidar",
+                "points": None,
+            },
+            "metadata": {
+                "image_prefix": self._root_path,
+                "num_point_features": LvxDataset.NumPointFeatures,
+                "token":str(info["token"]),
+            },
+            "mode": "val" if self.test_mode else "train",
+        }
+        res_1 = {
+            "lidar": {
+                "type": "lidar",
+                "points": None,
+            },
+            "metadata": {
+                "image_prefix": self._root_path,
+                "num_point_features": LvxDataset.NumPointFeatures,
+                "token":str(info["token"]),
+            },
+            "mode": "val" if self.test_mode else "train",
+        }
+        res_2 = {
+            "lidar": {
+                "type": "lidar",
+                "points": None,
+            },
+            "metadata": {
+                "image_prefix": self._root_path,
+                "num_point_features": LvxDataset.NumPointFeatures,
+                "token":str(info["token"]),
+            },
+            "mode": "val" if self.test_mode else "train",
+        }
         # 网络的输入为 3*data
-        data = self.process(idx)
-        for i in [idx-1,idx-2]:
-            data_tmp = self.process(i)
-            data[f'voxels_{idx-i}'] = data_tmp['voxels']
-            data[f'coordinates_{idx-i}'] = data_tmp['coordinates']
-            data[f'num_points_{idx-i}'] = data_tmp['num_points']
-            data[f'num_voxels_{idx-i}'] = data_tmp['num_voxels']
+
+        for t in self.pipeline.transforms:
+            if 'shuffle_points' in dir(t):
+                # 说明为preprocess类
+                res, info, res_1, info_1,res_2, info_2 = t(res, info, res_1, info_1,res_2, info_2)
+            else:
+                res, info = t(res, info)
+                res_1, info_1 = t(res_1, info_1)
+                res_2, info_2 = t(res_2, info_2)
+            if res is None:
+                return None
+
+        data = res
+        
+        data[f'voxels_1'] = res_1['voxels']
+        data[f'coordinates_1'] = res_1['coordinates']
+        data[f'num_points_1'] = res_1['num_points']
+        data[f'num_voxels_1'] = res_1['num_voxels']
+        data[f'voxels_2'] = res_2['voxels']
+        data[f'coordinates_2'] = res_2['coordinates']
+        data[f'num_points_2'] = res_2['num_points']
+        data[f'num_voxels_2'] = res_2['num_voxels']
 
         return data
