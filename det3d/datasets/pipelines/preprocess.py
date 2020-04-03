@@ -76,6 +76,7 @@ class Preprocess(object):
             # 加入之前之后一帧的boxes
                 "gt_boxes_1": anno_dict["boxes_1"],
                 "gt_boxes_2": anno_dict["boxes_2"],
+                "gt_boxes_3": anno_dict["boxes_3"],
                 "gt_names": np.array(anno_dict["names"]).reshape(-1),
             }
 
@@ -193,6 +194,7 @@ class Preprocess(object):
                 gt_dict["gt_boxes"],
                 gt_dict["gt_boxes_1"],
                 gt_dict["gt_boxes_2"],
+                gt_dict["gt_boxes_3"],
                 points,
                 points_1,
                 points_2,

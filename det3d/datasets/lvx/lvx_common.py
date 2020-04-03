@@ -335,7 +335,7 @@ def get_label_anno(label_path,idx):
     annotations["location"] = np.array(
         [[float(info) for info in x[4:7]] for x in content]
     ).reshape(-1, 3)
-    annotations["rotation_y"] = np.array([float(x[7]) for x in content]).reshape(-1)
+    annotations["rotation_y"] = -1*np.array([float(x[7]) for x in content]).reshape(-1)
     # 之前一帧的对应标注
     annotations["dimensions_1"] = np.array(
         [[float(x[2+9]),float(x[1+9]),float(x[3+9])] for x in content]
@@ -343,7 +343,7 @@ def get_label_anno(label_path,idx):
     annotations["location_1"] = np.array(
         [[float(info) for info in x[(4+9):(7+9)]] for x in content]
     ).reshape(-1, 3)
-    annotations["rotation_y_1"] = np.array([float(x[7+9]) for x in content]).reshape(-1)
+    annotations["rotation_y_1"] = -1*np.array([float(x[7+9]) for x in content]).reshape(-1)
 
     annotations["dimensions_2"] = np.array(
         [[float(x[2+9*2]),float(x[1+9*2]),float(x[3+9*2])] for x in content]
@@ -351,7 +351,16 @@ def get_label_anno(label_path,idx):
     annotations["location_2"] = np.array(
         [[float(info) for info in x[(4+9*2):(7+9*2)]] for x in content]
     ).reshape(-1, 3)
-    annotations["rotation_y_2"] = np.array([float(x[7+9*2]) for x in content]).reshape(-1)
+    annotations["rotation_y_2"] = -1*np.array([float(x[7+9*2]) for x in content]).reshape(-1)
+
+    # T-2帧的label，用于gtbox 的 gtaug， T-2帧的点需要对应旋转缩放
+    annotations["dimensions_3"] = np.array(
+        [[float(x[2+9*3]),float(x[1+9*3]),float(x[3+9*3])] for x in content]
+    ).reshape(-1, 3)
+    annotations["location_3"] = np.array(
+        [[float(info) for info in x[(4+9*3):(7+9*3)]] for x in content]
+    ).reshape(-1, 3)
+    annotations["rotation_y_3"] = -1*np.array([float(x[7+9*3]) for x in content]).reshape(-1)
     index = list(range(num_objects)) + [-1] * (num_gt - num_objects)
     annotations["group_ids"] = np.arange(num_gt, dtype=np.int32)
     return annotations
@@ -400,6 +409,9 @@ def empty_result_anno():
             "dimensions_2": np.zeros([0, 3]),
             "location_2": np.zeros([0, 3]),
             "rotation_y_2": np.array([]),
+            "dimensions_3": np.zeros([0, 3]),
+            "location_3": np.zeros([0, 3]),
+            "rotation_y_3": np.array([]),
             "score": np.array([]),
         }
     )

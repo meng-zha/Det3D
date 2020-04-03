@@ -175,12 +175,12 @@ class LoadPointCloudFromFile(object):
 
             pcd = o3d.io.read_point_cloud(str(velo_path))
             points = np.asarray(pcd.points).astype(np.float32)
-            # 将地面的点去除，以减小显存消耗
         
             if np.asarray(pcd.normals).shape[0] != 0:
                 normals_v = np.asarray(pcd.normals)
                 # TODO: num_features
                 points = np.concatenate([points,normals_v],axis=1)[:,:6].astype(np.float32)
+            # 将地面的点去除，以减小显存消耗
             # points = points[points[:,2]>0.1,:]
 
             res["lidar"]["points"] = points
@@ -226,11 +226,16 @@ class LoadPointCloudAnnotations(object):
                 gt_boxes_2= np.concatenate(
                     [annos["location_2"], annos["dimensions_2"], annos["rotation_y_2"][..., np.newaxis]], axis=1
                 ).astype(np.float32)
+                # T-2 label用于gt aug
+                gt_boxes_3= np.concatenate(
+                    [annos["location_3"], annos["dimensions_3"], annos["rotation_y_3"][..., np.newaxis]], axis=1
+                ).astype(np.float32)
 
                 res["lidar"]["annotations"] = {
                     "boxes": gt_boxes,
                     "boxes_1": gt_boxes_1,
                     "boxes_2": gt_boxes_2,
+                    "boxes_3": gt_boxes_3,
                     "names": gt_names,
                 }
 

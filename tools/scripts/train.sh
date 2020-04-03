@@ -25,4 +25,4 @@ fi
 # python -m torch.distributed.launch --nproc_per_node=1 ./tools/train.py ./examples/point_pillars/configs/kitti_point_pillars_mghead_syncbn.py  --work_dir=$PP_WORK_DIR 
 # python ./tools/train.py --local_rank=0 --work_dir=$PP_WORK_DIR ./examples/point_pillars/configs/kitti_pedestrian_point_pillars_mghead_syncbn.py --resume_from=Outputs/Det3D_Outputs/PointPillars_point_pillars_pedestrian_20200211-140512/epoch_99.pth
 # CUDA_VISIBLE_DEVICES=2 python ./tools/train.py --work_dir=$PP_WORK_DIR --local_rank=0 ./examples/point_pillars/configs/kitti_point_pillars_mghead_syncbn.py 
-CUDA_VISIBLE_DEVICES=2 python -W ignore ./tools/train.py --work_dir=$PP_WORK_DIR --local_rank=0 ./examples/point_pillars/configs/lvx_pedestrian_point_pillars.py 
+CUDA_VISIBLE_DEVICES=1 python -W ignore ./tools/train.py --work_dir=$PP_WORK_DIR --local_rank=0 ./examples/point_pillars/configs/lvx_pedestrian_point_pillars.py 

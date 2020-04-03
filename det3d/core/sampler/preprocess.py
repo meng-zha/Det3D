@@ -236,7 +236,7 @@ def _box_single_to_corner_jit(boxes):
 
 
 @numba.njit
-def noise_per_box(boxes,boxes_1,boxes_2, valid_mask, loc_noises, rot_noises):
+def noise_per_box(boxes,boxes_1,boxes_2,boxes_3, valid_mask, loc_noises, rot_noises):
     # boxes: [N, 5]
     # valid_mask: [N]
     # loc_noises: [N, M, 3]
@@ -247,10 +247,12 @@ def noise_per_box(boxes,boxes_1,boxes_2, valid_mask, loc_noises, rot_noises):
     box_corners = box_np_ops.box2d_to_corner_jit(boxes)
     box_corners_1 = box_np_ops.box2d_to_corner_jit(boxes_1)
     box_corners_2 = box_np_ops.box2d_to_corner_jit(boxes_2)
+    box_corners_3 = box_np_ops.box2d_to_corner_jit(boxes_3)
 
     current_corners = np.zeros((4, 2), dtype=boxes.dtype)
     current_corners_1 = np.zeros((4, 2), dtype=boxes.dtype)
     current_corners_2 = np.zeros((4, 2), dtype=boxes.dtype)
+    current_corners_3 = np.zeros((4, 2), dtype=boxes.dtype)
 
     rot_mat_T = np.zeros((2, 2), dtype=boxes.dtype)
     success_mask = -np.ones((num_boxes,), dtype=np.int64)
@@ -292,7 +294,19 @@ def noise_per_box(boxes,boxes_1,boxes_2, valid_mask, loc_noises, rot_noises):
                 )
                 coll_mat_2[0, i] = False
 
-                coll_mat = coll_mat*coll_mat_1*coll_mat_2
+                # T-2
+                center = boxes_3[i,:2] - boxes[i,:2]
+                _rotation_box2d_jit_(center.reshape((1,2)), rot_noises[i,j], rot_mat_T)
+                current_corners_3[:] = box_corners_3[i]
+                current_corners_3 -= boxes_3[i,:2]
+                _rotation_box2d_jit_(current_corners_3, rot_noises[i, j], rot_mat_T)
+                current_corners_3 += boxes[i, :2] + loc_noises[i,j,:2]+center[:2]
+                coll_mat_3 = box_collision_test(
+                    current_corners_3.reshape(1, 4, 2), box_corners_3
+                )
+                coll_mat_3[0, i] = False
+
+                coll_mat = coll_mat*coll_mat_1*coll_mat_2*coll_mat_3
 
                 # print(coll_mat)
                 if not coll_mat.any():
@@ -623,6 +637,7 @@ def noise_per_object_v3_(
     gt_boxes,
     gt_boxes_1,
     gt_boxes_2,
+    gt_boxes_3,
     points=None,
     points_1=None,
     points_2=None,
@@ -709,6 +724,10 @@ def noise_per_object_v3_(
     gt_box_corners_2 = box_np_ops.center_to_corner_box3d(
         gt_boxes_2[:, :3], gt_boxes_2[:, 3:6], gt_boxes_2[:, 6], origin=origin, axis=2
     )
+    # T-2
+    gt_box_corners_3 = box_np_ops.center_to_corner_box3d(
+        gt_boxes_3[:, :3], gt_boxes_3[:, 3:6], gt_boxes_3[:, 6], origin=origin, axis=2
+    )
     if group_ids is not None:
         if not enable_grot:
             selected_noise = noise_per_box_group(
@@ -733,6 +752,7 @@ def noise_per_object_v3_(
                 gt_boxes[:, [0, 1, 3, 4, 6]],
                 gt_boxes_1[:, [0, 1, 3, 4, 6]],
                 gt_boxes_2[:, [0, 1, 3, 4, 6]],
+                gt_boxes_3[:, [0, 1, 3, 4, 6]],
                 valid_mask, loc_noises, rot_noises
             )
         else:
@@ -777,6 +797,19 @@ def noise_per_object_v3_(
     # T+1帧的增广
     loc_transforms_2 = get_loc_transform(loc_transforms,rot_transforms, gt_boxes,gt_boxes_2)
     box3d_transform_(gt_boxes_2, loc_transforms_2, rot_transforms, valid_mask)
+
+    # T-2帧的增广
+    loc_transforms_3 = get_loc_transform(loc_transforms,rot_transforms, gt_boxes,gt_boxes_3)
+    if points_2 is not None:
+        point_masks = points_in_convex_polygon_3d_jit(points_2[:, :3], surfaces)
+        points_transform_(
+            points_2,
+            gt_boxes_3[:, :3],
+            point_masks,
+            loc_transforms_3,
+            rot_transforms,
+            valid_mask,
+        )
 
 
 
@@ -911,7 +944,7 @@ def random_flip(gt_boxes,gt_boxes_1,gt_boxes_2, points, points_1, points_2,proba
         gt_boxes_2[:, -1] = -gt_boxes_2[:, -1] + np.pi
         points[:, 1] = -points[:, 1]
         points_1[:, 1] = -points_1[:, 1]
-        points_2[:, 2] = -points_1[:, 1]
+        points_2[:, 2] = -points_2[:, 1]
         if gt_boxes.shape[1] > 7:  # y axis: x, y, z, w, h, l, vx, vy, r
             gt_boxes[:, 7] = -gt_boxes[:, 7]
     return gt_boxes,gt_boxes_1,gt_boxes_2, points, points_1, points_2
