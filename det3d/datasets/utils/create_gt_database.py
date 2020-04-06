@@ -80,7 +80,7 @@ def create_groundtruth_database(
     group_counter = 0
 
     # def prepare_single_data(index):
-    for index in tqdm(range(len(dataset)+2)):
+    for index in tqdm(range(len(dataset._lvx_infos)):
         image_idx = index
         # modified to nuscenes
         sensor_data = dataset.process(index)

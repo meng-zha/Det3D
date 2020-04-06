@@ -312,6 +312,9 @@ def noise_per_box(boxes,boxes_1,boxes_2,boxes_3, valid_mask, loc_noises, rot_noi
                 if not coll_mat.any():
                     success_mask[i] = j
                     box_corners[i] = current_corners
+                    box_corners_1[i] = current_corners_1
+                    box_corners_2[i] = current_corners_2
+                    box_corners_3[i] = current_corners_3
                     break
     return success_mask
 
@@ -776,7 +779,6 @@ def noise_per_object_v3_(
             rot_transforms,
             valid_mask,
         )
-    box3d_transform_(gt_boxes, loc_transforms, rot_transforms, valid_mask)
     
     # T-1 帧的增广
     loc_transforms_1 = get_loc_transform(loc_transforms,rot_transforms, gt_boxes,gt_boxes_1)
@@ -810,6 +812,9 @@ def noise_per_object_v3_(
             rot_transforms,
             valid_mask,
         )
+
+    # T帧的box需要做为基准，所以最后变换
+    box3d_transform_(gt_boxes, loc_transforms, rot_transforms, valid_mask)
 
 
 
@@ -1083,13 +1088,14 @@ def global_translate_(gt_boxes, points, noise_translate_std):
 
     return gt_boxes, points
 
-def get_loc_transform(loc_transforms, rot_transforms, boxes,boxes_1):
-    loc_transforms = copy.deepcopy(loc_transforms)
+def get_loc_transform(loc_transforms_origin, rot_transforms, boxes,boxes_1):
+    loc_transforms = copy.deepcopy(loc_transforms_origin)
     rot_mat_T = np.zeros((2, 2), dtype=boxes.dtype)
     center = boxes_1[:,:2]-boxes[:,:2]
     for i in range(center.shape[0]):
         _rotation_box2d_jit_(center[i],rot_transforms[i],rot_mat_T)
         loc_transforms[i,:2] += center[i]
+    loc_transforms[:,:2] -= (boxes_1[:,:2]-boxes[:,:2])
     return loc_transforms
 
 if __name__ == "__main__":

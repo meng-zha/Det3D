@@ -243,8 +243,6 @@ class LvxDataset(PointCloudDataset):
 
     def get_sensor_data(self, idx):
 
-        length = 0
-
         # 取当前帧及之前两帧的点云
         for i,start in enumerate(self._video_times):
             if idx < start:

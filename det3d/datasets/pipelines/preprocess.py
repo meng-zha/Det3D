@@ -55,7 +55,6 @@ class Preprocess(object):
         self.symmetry_intensity = cfg.get("symmetry_intensity", False)
 
     def __call__(self, res, info, res_1, info_1, res_2, info_2):
-        # TODO: CHANGE THE PREPROCESS TO 3 FRAMES
 
         res["mode"] = self.mode
         res_1["mode"] = self.mode
