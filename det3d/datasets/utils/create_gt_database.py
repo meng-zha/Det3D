@@ -80,7 +80,7 @@ def create_groundtruth_database(
     group_counter = 0
 
     # def prepare_single_data(index):
-    for index in tqdm(range(len(dataset._lvx_infos)):
+    for index in tqdm(range(len(dataset._lvx_infos))):
         image_idx = index
         # modified to nuscenes
         sensor_data = dataset.process(index)
@@ -97,7 +97,6 @@ def create_groundtruth_database(
         elif dataset_class_name == "LVX":
             points = sensor_data["lidar"]["points"]
 
-        print(points.shape)
         annos = sensor_data["lidar"]["annotations"]
         gt_boxes = annos["boxes"]
         names = annos["names"]

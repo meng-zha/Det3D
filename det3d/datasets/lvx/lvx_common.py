@@ -328,6 +328,10 @@ def get_label_anno(label_path,idx):
     annotations["bbox"] = np.array(
         [[0,0,500,500] for x in content]
     ).reshape(-1, 4)
+
+    # track_id
+    annotations["id"] = np.array([int(float(x[8])) for x in content]).reshape(-1)
+
     # dimensions will convert wlh format to standard lwh(lvx) format.
     annotations["dimensions"] = np.array(
         [[float(x[2]),float(x[1]),float(x[3])] for x in content]

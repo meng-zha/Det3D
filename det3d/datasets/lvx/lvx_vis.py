@@ -10,6 +10,8 @@ import argparse
 import open3d as o3d
 import cv2
 
+from det3d.datasets.utils.eval import calculate_iou_partly
+camera = [-106.4126,46.4585,21.0723]
 
 class Object3d(object):
     """ 3d object label """
@@ -51,6 +53,9 @@ class Object3d(object):
         self.track = -1
         if "track_id" in annos.keys():
             self.track = annos["track_id"][idx]
+        self.id = -1
+        if "id" in annos.keys():
+            self.id = annos["id"][idx]
 
     def print_object(self):
         print(
@@ -269,7 +274,7 @@ def show_lidar_with_boxes(pc_velo, objects, calib):
         p3d.add_line([x1, y1, z1], [x2, y2, z2])
     p3d.show()
 
-def show_bev_objects(lidar,lidar_1,lidar_2,gt_objects,dt_objects,output_dir):
+def show_bev_objects(lidar,lidar_1,lidar_2,gt_objects,dt_objects,output_dir,overlap = None, miss = None):
     points = lidar[:,:4]
     color_map = ['r','g','b','y']
     # colors = [color_map[int(i)] for i in points[:,3]]
@@ -284,6 +289,10 @@ def show_bev_objects(lidar,lidar_1,lidar_2,gt_objects,dt_objects,output_dir):
     for obj in gt_objects:
         if obj.type == "DontCare":
             continue
+
+        if np.array(overlap[gt_objects.index(obj)]).max() < 0.25:
+            dist = (((np.array(obj.t[0]-camera))**2).sum())**0.5
+            miss[obj.id,int(dist//10)] += 1 
         # Draw bev bounding box
         box3d_pts_3d = compute_box_3d_track(obj.l,obj.w,obj.h,obj.rz,*obj.t)
         for k in range(4):
@@ -310,7 +319,7 @@ def show_bev_objects(lidar,lidar_1,lidar_2,gt_objects,dt_objects,output_dir):
             continue
         # Draw bev bounding box
         box3d_pts_3d = compute_box_3d_track(obj.l,obj.w,obj.h,obj.rz,*obj.t)
-        np.random.seed(int(obj.track))
+        np.random.seed(int(abs(obj.track)))
         c = np.random.rand(3)
         for k in range(4):
             i, j = k, (k + 1) % 4
@@ -356,8 +365,9 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
     root_path = dt_annos[0]["metadata"]["image_prefix"]
     
     if gt_annos is not None:
+        miss = np.zeros((22,20))
+        overlap,_,_,_ = calculate_iou_partly(gt_annos,dt_annos,2,50,2,0.5)
         dataset = lvx_object(root_path)
-        # 前两帧不做检测
         gt_image_idxes = [str(info["token"]) for info in gt_annos]
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         vot = cv2.VideoWriter(os.path.join(output_dir,"bev_video.mp4"),fourcc,10,(3200,2400),True)
@@ -395,10 +405,11 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
 
             img_path = os.path.join(output_dir,f"bev_imgs/lvx_{idx}.png")
 
-            show_bev_objects(points,points_1,points_2,gt_objects,dt_objects,img_path)
+            show_bev_objects(points,points_1,points_2,gt_objects,dt_objects,img_path,overlap[gt_image_idxes.index(idx)],miss)
             img = cv2.imread(img_path)
             vot.write(img)
         vot.release()
+        np.savetxt('miss.txt',miss)
     
     else:
         dataset = lvx_object(root_path,split="testing")
@@ -438,7 +449,7 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
 
             img_path = os.path.join(output_dir,f"beicao_imgs/lvx_{idx}.png")
 
-            show_bev_objects(points,points_1,points_2,[],dt_objects,img_path)
+            show_bev_objects(points,points_1,points_2,[],dt_objects,img_path,None, None)
             img = cv2.imread(img_path)
             vot.write(img)
         vot.release()

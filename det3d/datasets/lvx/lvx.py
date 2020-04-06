@@ -43,6 +43,7 @@ class LvxDataset(PointCloudDataset):
         if self._start_idx == []:
             self._start_idx=[[0,len(self._lvx_infos)-1]]
         self._video_times = self.load_videos(self._start_idx)
+        self.raw_length = len(self._lvx_infos)
     
     def load_infos(self,info_path):
         
