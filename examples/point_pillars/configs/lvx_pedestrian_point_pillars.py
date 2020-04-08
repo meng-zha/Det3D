@@ -120,7 +120,7 @@ test_cfg = dict(
 
 # dataset settings
 dataset_type = "LvxDataset"
-data_root = "/data3/3d_detection/BBOX_x2_track"
+data_root = "/Extra/zhangmeng/3d_detection/BBOX_x2_track"
 
 db_sampler = dict(
     type="GT-AUG",
@@ -205,8 +205,8 @@ test_anno = None
 start_idx = [[0,115],[117,332],[333,560]] # 训练集为三段
 
 data = dict(
-    samples_per_gpu=1,
-    workers_per_gpu=1,
+    samples_per_gpu=2,
+    workers_per_gpu=2,
     train=dict(
         type=dataset_type,
         root_path=data_root,
@@ -257,10 +257,10 @@ lr_config = dict(
     type="one_cycle", lr_max=3e-3, moms=[0.95, 0.85], div_factor=10.0, pct_start=0.4,
 )
 
-checkpoint_config = dict(interval=1)
+checkpoint_config = dict(interval=5)
 # yapf:disable
 log_config = dict(
-    interval=50,
+    interval=20,
     hooks=[
         dict(type="TextLoggerHook"),
         # dict(type='TensorboardLoggerHook')
@@ -268,11 +268,11 @@ log_config = dict(
 )
 # yapf:enable
 # runtime settings
-total_epochs = 80
-device_ids = range(4)
+total_epochs = 150
+device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"
-work_dir = "/data/Outputs/det3d_Outputs/Point_Pillars"
+work_dir = "/Extra/zhangmeng/Outputs/det3d_Outputs/Point_Pillars"
 load_from = None
 resume_from = None
-workflow = [("train", 1),("val",1)]
+workflow = [("train", 5),("val",1)]

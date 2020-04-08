@@ -2,6 +2,8 @@ import copy
 from pathlib import Path
 import pickle
 
+import open3d # open3d should be imported before pytorch
+
 import fire
 
 from det3d.datasets.kitti import kitti_common as kitti_ds

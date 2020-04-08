@@ -3,6 +3,7 @@ import json
 import os
 import sys
 
+import open3d # open3d should be imported before pytorch
 import apex
 import numpy as np
 import torch
@@ -94,8 +95,8 @@ def main():
 
     model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
 
-    dataset = build_dataset(cfg.data.val)
-    # dataset = build_dataset(cfg.data.test)
+    # dataset = build_dataset(cfg.data.val)
+    dataset = build_dataset(cfg.data.test)
     data_loader = build_dataloader(
         dataset,
         batch_size=cfg.data.samples_per_gpu,

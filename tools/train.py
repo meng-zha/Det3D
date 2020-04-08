@@ -4,6 +4,7 @@ import os
 import sys
 
 import numpy as np
+import open3d # open3d should be imported before pytorch
 import torch
 import yaml
 from det3d import __version__

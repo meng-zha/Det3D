@@ -1,7 +1,7 @@
 #!/bin/bash
 TASK_DESC=$1
 DATE_WITH_TIME=`date "+%Y%m%d-%H%M%S"`
-OUT_DIR='/home/zhangm/Det3D/Outputs/Det3D_Outputs'
+OUT_DIR='/Extra/zhangmeng/3d_detection/Outputs/Det3D_Outputs'
 
 NUSC_CBGS_WORK_DIR=$OUT_DIR/NUSC_CBGS_$TASK_DESC\_$DATE_WITH_TIME
 LYFT_CBGS_WORK_DIR=$OUT_DIR/LYFT_CBGS_$TASK_DESC\_$DATE_WITH_TIME

@@ -113,3 +113,5 @@ train.sh
 
 # outputs
 Outputs/
+
+gt_generation/
