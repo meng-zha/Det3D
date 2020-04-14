@@ -8,9 +8,13 @@ import pyqtgraph as pg
 import pyqtgraph.opengl as gl
 import argparse
 import open3d as o3d
+import mayavi.mlab as mlab
+mlab.options.offscreen = True
 import cv2
 
 from det3d.datasets.utils.eval import calculate_iou_partly
+from det3d.core.bbox.box_np_ops import center_to_corner_box3d
+from .viz_util import draw_gt_boxes3d,draw_lidar
 camera = [-106.4126,46.4585,21.0723]
 
 class Object3d(object):
@@ -111,7 +115,8 @@ class lvx_object(object):
         self.root_dir = root_dir
         self.split=split
 
-        self.lidar_dir = os.path.join(self.root_dir, self.split, "Lidar")
+        # self.lidar_dir = os.path.join(self.root_dir, self.split, "Lidar")
+        self.lidar_dir = '/Extra/zhangmeng/3d_detection/zm_dataset/pc_out/samplex4'
         self.label_dir = os.path.join(self.root_dir, self.split, "Label")
 
     def get_lidar(self, idx):
@@ -287,12 +292,19 @@ def show_bev_objects(lidar,lidar_1,lidar_2,gt_objects,dt_objects,output_dir,over
 
 
     for obj in gt_objects:
+        if obj.t[0]<-40 or obj.t[0]>40 or obj.t[1]<-40 or obj.t[1]>40:
+            continue
+
         if obj.type == "DontCare":
+            # 如果没有点，设为标志-1
+            dist = (((np.array(obj.t)-camera)**2).sum())**0.5
+            miss[obj.id] = -dist
             continue
 
         if np.array(overlap[gt_objects.index(obj)]).max() < 0.25:
-            dist = (((np.array(obj.t[0]-camera))**2).sum())**0.5
-            miss[obj.id,int(dist//10)] += 1 
+            # 如果有点，但是没有检测出来，设为标志1
+            dist = (((np.array(obj.t)-camera)**2).sum())**0.5
+            miss[obj.id]=dist
         # Draw bev bounding box
         box3d_pts_3d = compute_box_3d_track(obj.l,obj.w,obj.h,obj.rz,*obj.t)
         for k in range(4):
@@ -311,7 +323,7 @@ def show_bev_objects(lidar,lidar_1,lidar_2,gt_objects,dt_objects,output_dir,over
         ori3d_pts_3d = compute_orientation_3d(obj)
         x1, y1, z1 = ori3d_pts_3d[0, :]
         x2, y2, z2 = ori3d_pts_3d[1, :]
-        plt.text(x1,y1,f"{obj.h:.1f}",c='y',fontsize=3)
+        plt.text(x1,y1,f"h={obj.h:.1f},z={obj.t[2]:.1f}",c='y',fontsize=3)
         plt.plot([x1, x2], [y1, y2],color='y',linewidth=0.3)
 
     for obj in dt_objects:
@@ -337,7 +349,7 @@ def show_bev_objects(lidar,lidar_1,lidar_2,gt_objects,dt_objects,output_dir,over
         ori3d_pts_3d = compute_orientation_3d(obj)
         x1, y1, z1 = ori3d_pts_3d[0, :]
         x2, y2, z2 = ori3d_pts_3d[1, :]
-        plt.text(x1,y1,f"track={int(obj.track)}",c='k',fontsize=3)
+        plt.text(x1,y1,f"track={int(obj.track)},h={obj.h:.1f},z={obj.t[2]:.1f}",c='k',fontsize=3)
         plt.plot([x1, x2], [y1, y2],linewidth=0.3,color='k')
 
     if gt_objects == []:
@@ -365,7 +377,7 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
     root_path = dt_annos[0]["metadata"]["image_prefix"]
     
     if gt_annos is not None:
-        miss = np.zeros((22,20))
+        miss = np.zeros((22,len(gt_annos)))
         overlap,_,_,_ = calculate_iou_partly(gt_annos,dt_annos,2,50,2,0.5)
         dataset = lvx_object(root_path)
         gt_image_idxes = [str(info["token"]) for info in gt_annos]
@@ -405,11 +417,11 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
 
             img_path = os.path.join(output_dir,f"bev_imgs/lvx_{idx}.png")
 
-            show_bev_objects(points,points_1,points_2,gt_objects,dt_objects,img_path,overlap[gt_image_idxes.index(idx)],miss)
+            show_bev_objects(points,points_1,points_2,gt_objects,dt_objects,img_path,overlap[gt_image_idxes.index(idx)],miss[:,gt_image_idxes.index(idx)])
             img = cv2.imread(img_path)
             vot.write(img)
         vot.release()
-        np.savetxt('miss.txt',miss)
+        np.savetxt(os.path.join(output_dir,'miss.txt'),miss,fmt="%d")
     
     else:
         dataset = lvx_object(root_path,split="testing")
@@ -454,9 +466,50 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
             vot.write(img)
         vot.release()
     
+def lvx_vis_3d(gt_annos,dt_annos,output_dir):
+    root_path = dt_annos[0]["metadata"]["image_prefix"]
+    fig = mlab.figure(figure=None, bgcolor=(0,0,0), fgcolor=None, engine=None, size=(1600, 1000))
 
+    if gt_annos is not None:
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        vot = cv2.VideoWriter(os.path.join(output_dir,"beicao_video.mp4"),fourcc,10,(1600,1000),True)
+        dataset = lvx_object(root_path)
+        gt_image_idxes = [str(info["token"]) for info in gt_annos]
 
+        for i in range(len(gt_annos)):
+            print(gt_annos[i]['token'])
+            points = dataset.get_lidar(gt_annos[i]['token'])
+            points = points[points[:,2]>0.1,:]
+            # gt_annos[i] = remove_dontcare(gt_annos[i])
+            fig = draw_lidar(points,color=None,fig=fig, pts_mode = 'sphere')
+            gt_corners = center_to_corner_box3d(gt_annos[i]['location'],gt_annos[i]['dimensions'], gt_annos[i]['rotation_y'])
+            fig = draw_gt_boxes3d(gt_corners, gt_annos[i]['id'],color=(0,0,1),fig=fig)
+            dt_corners = center_to_corner_box3d(dt_annos[i]['location'],dt_annos[i]['dimensions'], dt_annos[i]['rotation_y'])
+            fig = draw_gt_boxes3d(dt_corners, dt_annos[i]['track_id'],color=(0,1,0),fig=fig)
+            img_path = os.path.join(output_dir,f"bev_imgs/lvx_{gt_annos[i]['token']}.png")
+            mlab.savefig(img_path)
+            mlab.clf(figure=fig)
+            img = cv2.imread(img_path)
+            vot.write(img)
+        vot.release()
 
+def remove_dontcare(image_anno):
+    indice = []
+    for i in range(len(image_anno['name'])):
+        if image_anno['name'][i] == "DontCare":
+            indice.append(i)
+    
+    image_anno['name'] = np.delete(image_anno['name'],indice)
+    image_anno['location'] = np.delete(image_anno['location'],indice,axis=0)
+    image_anno['dimensions'] = np.delete(image_anno['dimensions'],indice,axis=0)
+    image_anno['rotation_y'] = np.delete(image_anno['rotation_y'],indice)
+
+    if 'id' in image_anno.keys():
+        image_anno['id'] = np.delete(image_anno['id'],indice)
+    else:
+        image_anno['track_id'] = np.delete(image_anno['track_id'],indice)
+
+    return image_anno
 # -----------------------------------------------------------------------------------------
 
 if __name__ == "__main__":

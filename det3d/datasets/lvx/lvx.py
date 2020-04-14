@@ -10,7 +10,7 @@ from det3d.datasets.registry import DATASETS
 
 from .lvx_common import *
 from .eval import get_official_eval_result
-from .lvx_vis import lvx_vis
+from .lvx_vis import lvx_vis, lvx_vis_3d
 from .lvx_track import lvx_track
 
 
