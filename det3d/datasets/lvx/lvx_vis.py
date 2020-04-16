@@ -115,8 +115,8 @@ class lvx_object(object):
         self.root_dir = root_dir
         self.split=split
 
-        # self.lidar_dir = os.path.join(self.root_dir, self.split, "Lidar")
-        self.lidar_dir = '/Extra/zhangmeng/3d_detection/zm_dataset/pc_out/samplex4'
+        self.lidar_dir = os.path.join(self.root_dir, self.split, "Lidar")
+        # self.lidar_dir = '/Extra/zhangmeng/3d_detection/zm_dataset/pc_out/samplex4'
         self.label_dir = os.path.join(self.root_dir, self.split, "Label")
 
     def get_lidar(self, idx):
@@ -294,31 +294,34 @@ def show_bev_objects(lidar,lidar_1,lidar_2,gt_objects,dt_objects,output_dir,over
     for obj in gt_objects:
         if obj.t[0]<-40 or obj.t[0]>40 or obj.t[1]<-40 or obj.t[1]>40:
             continue
+        
+        if np.array(overlap[gt_objects.index(obj)]).max() > 0.25:
+            miss[obj.id] = dt_objects[np.array(overlap[gt_objects.index(obj)]).argmax()].track
 
         if obj.type == "DontCare":
             # 如果没有点，设为标志-1
             dist = (((np.array(obj.t)-camera)**2).sum())**0.5
-            miss[obj.id] = -dist
+            miss[obj.id] = -1
             continue
 
         if np.array(overlap[gt_objects.index(obj)]).max() < 0.25:
             # 如果有点，但是没有检测出来，设为标志1
             dist = (((np.array(obj.t)-camera)**2).sum())**0.5
-            miss[obj.id]=dist
+            miss[obj.id]=-1
         # Draw bev bounding box
         box3d_pts_3d = compute_box_3d_track(obj.l,obj.w,obj.h,obj.rz,*obj.t)
         for k in range(4):
             i, j = k, (k + 1) % 4
             plt.plot([box3d_pts_3d[i,0],box3d_pts_3d[j,0]],[box3d_pts_3d[i,1],box3d_pts_3d[j,1]],color='r',linewidth=0.3)
 
-        box3d_pts_3d_1 = compute_box_3d_track(obj.l_1,obj.w_1,obj.h_1,obj.rz_1,*obj.t_1)
-        for k in range(4):
-            i, j = k, (k + 1) % 4
-            plt.plot([box3d_pts_3d_1[i,0],box3d_pts_3d_1[j,0]],[box3d_pts_3d_1[i,1],box3d_pts_3d_1[j,1]],color='y',linewidth=0.3)
-        box3d_pts_3d_2 = compute_box_3d_track(obj.l_2,obj.w_2,obj.h_2,obj.rz_2,*obj.t_2)
-        for k in range(4):
-            i, j = k, (k + 1) % 4
-            plt.plot([box3d_pts_3d_2[i,0],box3d_pts_3d_2[j,0]],[box3d_pts_3d_2[i,1],box3d_pts_3d_2[j,1]],color='black',linewidth=0.3)
+        # box3d_pts_3d_1 = compute_box_3d_track(obj.l_1,obj.w_1,obj.h_1,obj.rz_1,*obj.t_1)
+        # for k in range(4):
+        #     i, j = k, (k + 1) % 4
+        #     plt.plot([box3d_pts_3d_1[i,0],box3d_pts_3d_1[j,0]],[box3d_pts_3d_1[i,1],box3d_pts_3d_1[j,1]],color='y',linewidth=0.3)
+        # box3d_pts_3d_2 = compute_box_3d_track(obj.l_2,obj.w_2,obj.h_2,obj.rz_2,*obj.t_2)
+        # for k in range(4):
+        #     i, j = k, (k + 1) % 4
+        #     plt.plot([box3d_pts_3d_2[i,0],box3d_pts_3d_2[j,0]],[box3d_pts_3d_2[i,1],box3d_pts_3d_2[j,1]],color='black',linewidth=0.3)
         # Draw heading arrow
         ori3d_pts_3d = compute_orientation_3d(obj)
         x1, y1, z1 = ori3d_pts_3d[0, :]
@@ -337,14 +340,14 @@ def show_bev_objects(lidar,lidar_1,lidar_2,gt_objects,dt_objects,output_dir,over
             i, j = k, (k + 1) % 4
             plt.plot([box3d_pts_3d[i,0],box3d_pts_3d[j,0]],[box3d_pts_3d[i,1],box3d_pts_3d[j,1]],color=c,linewidth=1)
 
-        # box3d_pts_3d_1 = compute_box_3d_track(obj.l_1,obj.w_1,obj.h_1,obj.rz_1,*obj.t_1)
-        # for k in range(4):
-        #     i, j = k, (k + 1) % 4
-        #     plt.plot([box3d_pts_3d_1[i,0],box3d_pts_3d_1[j,0]],[box3d_pts_3d_1[i,1],box3d_pts_3d_1[j,1]],color='gold',linewidth=0.3)
-        # box3d_pts_3d_2 = compute_box_3d_track(obj.l_2,obj.w_2,obj.h_2,obj.rz_2,*obj.t_2)
-        # for k in range(4):
-        #     i, j = k, (k + 1) % 4
-        #     plt.plot([box3d_pts_3d_2[i,0],box3d_pts_3d_2[j,0]],[box3d_pts_3d_2[i,1],box3d_pts_3d_2[j,1]],color='indigo',linewidth=0.3)
+        box3d_pts_3d_1 = compute_box_3d_track(obj.l_1,obj.w_1,obj.h_1,obj.rz_1,*obj.t_1)
+        for k in range(4):
+            i, j = k, (k + 1) % 4
+            plt.plot([box3d_pts_3d_1[i,0],box3d_pts_3d_1[j,0]],[box3d_pts_3d_1[i,1],box3d_pts_3d_1[j,1]],color='gold',linewidth=0.3)
+        box3d_pts_3d_2 = compute_box_3d_track(obj.l_2,obj.w_2,obj.h_2,obj.rz_2,*obj.t_2)
+        for k in range(4):
+            i, j = k, (k + 1) % 4
+            plt.plot([box3d_pts_3d_2[i,0],box3d_pts_3d_2[j,0]],[box3d_pts_3d_2[i,1],box3d_pts_3d_2[j,1]],color='indigo',linewidth=0.3)
         # Draw heading arrow
         ori3d_pts_3d = compute_orientation_3d(obj)
         x1, y1, z1 = ori3d_pts_3d[0, :]
@@ -510,29 +513,3 @@ def remove_dontcare(image_anno):
         image_anno['track_id'] = np.delete(image_anno['track_id'],indice)
 
     return image_anno
-# -----------------------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="KITTI LiDAR Viewer")
-    parser.add_argument("--dataset-root", help="KITTI dataset root_dir")
-    parser.add_argument("--num", type=int, help="Number of lidar samples to show")
-
-    args = parser.parse_args()
-
-    dataset = kitti_object(args.dataset_root, "training")
-    idxs = [
-        int(i.split(".")[0])
-        for i in os.listdir(os.path.join(args.dataset_root, "training", "velodyne"))
-    ]
-    for data_idx in idxs[: args.num]:
-        # PC
-        lidar_data = dataset.get_lidar(data_idx)
-        print(lidar_data.shape)
-        # OBJECTS
-        objects = dataset.get_label_objects(data_idx)
-        objects[0].print_object()
-        # CALIB
-        calib = dataset.get_calibration(data_idx)
-        print(calib.P)
-        # Show
-        show_lidar_with_boxes(lidar_data, objects, calib)
