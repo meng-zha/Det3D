@@ -405,6 +405,8 @@ def create_target_np_track(
         bbox_outside_weights[labels > 0] = 1.0
     # bbox_outside_weights[labels == 0, :] = 1.0 / num_examples
 
+    # assign weights by the min distance, the closer, the larger weights
+
     # Map up to original set of anchors
     if inds_inside is not None:
         labels = unmap(labels, total_anchors, inds_inside, fill=-1)
