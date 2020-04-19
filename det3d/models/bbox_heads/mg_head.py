@@ -554,6 +554,7 @@ class MultiGroupHead(nn.Module):
     def prepare_loss_weights(
         self,
         labels,
+        reg_weights,
         loss_norm=dict(
             type="NormByNumPositives", pos_cls_weight=1.0, neg_cls_weight=1.0,
         ),
@@ -569,7 +570,7 @@ class MultiGroupHead(nn.Module):
         negatives = labels == 0
         negative_cls_weights = negatives.type(dtype) * neg_cls_weight
         cls_weights = negative_cls_weights + pos_cls_weight * positives.type(dtype)
-        reg_weights = positives.type(dtype)
+        # reg_weights = positives.type(dtype)
         if loss_norm_type == LossNormType.NormByNumExamples:
             num_examples = cared.type(dtype).sum(1, keepdim=True)
             num_examples = torch.clamp(num_examples, min=1.0)
@@ -627,8 +628,10 @@ class MultiGroupHead(nn.Module):
                 reg_targets_1 = example["reg_targets_1"][task_id]
                 reg_targets_2 = example["reg_targets_2"][task_id]
 
+            reg_weights = example["reg_weights"][task_id]
+
             cls_weights, reg_weights, cared = self.prepare_loss_weights(
-                labels, loss_norm=self.loss_norm, dtype=torch.float32,
+                labels, reg_weights, loss_norm=self.loss_norm,dtype=torch.float32,
             )
             cls_targets = labels * cared.type_as(labels)
             cls_targets = cls_targets.unsqueeze(-1)
