@@ -50,8 +50,8 @@ def build_dataloader(
         shuffle=(sampler is None),
         num_workers=num_workers,
         collate_fn=collate_kitti,
-        # pin_memory=True,
-        pin_memory=False,
+        pin_memory=True,
+        # pin_memory=False,
     )
 
     return data_loader

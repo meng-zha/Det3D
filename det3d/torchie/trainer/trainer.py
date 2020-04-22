@@ -111,7 +111,7 @@ class Prefetcher(object):
             return
         with torch.cuda.stream(self.stream):
             self.next_input = example_to_device(
-                self.next_input, torch.cuda.current_device(), non_blocking=False
+                self.next_input, torch.cuda.current_device(), non_blocking=True
             )
 
     def next(self):
@@ -353,7 +353,7 @@ class Trainer(object):
 
         # data = example_convert_to_torch(data, device=device)
         example = example_to_device(
-            data, torch.cuda.current_device(), non_blocking=False
+            data, torch.cuda.current_device(), non_blocking=True
         )
 
         self.call_hook("after_data_to_device")

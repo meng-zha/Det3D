@@ -109,3 +109,5 @@ train.sh
 ./det3d/version.py
 
 *.pyc
+
+gt_generation/

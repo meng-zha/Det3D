@@ -148,7 +148,7 @@ def batch_processor(model, data, train_mode, **kwargs):
         device = None
 
     # data = example_convert_to_torch(data, device=device)
-    example = example_to_device(data, device, non_blocking=False)
+    example = example_to_device(data, device, non_blocking=True)
 
     del data
 
