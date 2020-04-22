@@ -40,6 +40,13 @@ box_coder = dict(
     type="ground_box3d_coder", n_dim=7, linear_dim=False, encode_angle_vector=False,
 )
 
+voxel_generator = dict(
+    range=[-40, -40, -0.1, 40, 40, 2.0],
+    voxel_size=[80./320, 80./320, 2.0],
+    max_points_in_voxel=50,
+    max_voxel_num=20000,
+)
+
 # model settings
 model = dict(
     type="PointPillars",
@@ -49,6 +56,8 @@ model = dict(
         type="PillarFeatureNet",
         num_filters=[64],
         with_distance=False,
+        voxel_size=voxel_generator['voxel_size'],
+        pc_range=voxel_generator['range'],
         norm_cfg=norm_cfg,
     ),
     backbone=dict(type="PointPillarsScatter", ds_factor=1, norm_cfg=norm_cfg,),
@@ -164,13 +173,6 @@ test_preprocessor = dict(
     shuffle_points=False,
     remove_environment=False,
     remove_unknown_examples=False,
-)
-
-voxel_generator = dict(
-    range=[-40, -40, -0.1, 40, 40, 2.0],
-    voxel_size=[80./320, 80./320, 2.0],
-    max_points_in_voxel=50,
-    max_voxel_num=20000,
 )
 
 train_pipeline = [
