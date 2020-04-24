@@ -406,11 +406,11 @@ def create_target_np_track(
     # bbox_outside_weights[labels == 0, :] = 1.0 / num_examples
 
     # assign weights by the min distance, the closer, the larger weights
-    for j in range(gt_boxes.shape[0]):
-        dist = (((gt_boxes[:,:3]-gt_boxes[j,:3])**2).sum(axis=1))**0.5
-        dist = np.delete(dist,j)
-        if dist.min()<2:
-            bbox_outside_weights[gt_to_anchor_argmax[j]] *= 2/dist.min()
+    # for j in range(gt_boxes.shape[0]):
+    #     dist = (((gt_boxes[:,:3]-gt_boxes[j,:3])**2).sum(axis=1))**0.5
+    #     dist = np.delete(dist,j)
+    #     if dist.min()<2:
+    #         bbox_outside_weights[gt_to_anchor_argmax[j]] *= 2/dist.min()
 
 
     # Map up to original set of anchors
