@@ -129,7 +129,7 @@ test_cfg = dict(
 
 # dataset settings
 dataset_type = "LvxDataset"
-data_root = "/Extra/zhangmeng/3d_detection/BBOX_x2_track"
+data_root = "/Extra/zhangmeng/3d_detection/BBOX_x4_track"
 
 db_sampler = dict(
     type="GT-AUG",

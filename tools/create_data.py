@@ -2,10 +2,10 @@ import copy
 from pathlib import Path
 import pickle
 
-import open3d # open3d should be imported before pytorch
 
 import fire
 
+import open3d # open3d should be imported before pytorch
 from det3d.datasets.kitti import kitti_common as kitti_ds
 from det3d.datasets.nuscenes import nusc_common as nu_ds
 from det3d.datasets.lyft import lyft_common as lyft_ds
