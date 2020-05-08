@@ -23,10 +23,10 @@ class Object3d(object):
     def __init__(self, annos, idx):
         # extract label, truncation, occlusion
         self.type = annos["name"][idx]  # 'Car', 'Pedestrian', ...
-        self.truncation = annos["truncated"][idx]  # truncated pixel ratio [0..1]
-        self.occlusion = int(
-            annos["occluded"][idx]
-        )  # 0=visible, 1=partly occluded, 2=fully occluded, 3=unknown
+        # self.truncation = annos["truncated"][idx]  # truncated pixel ratio [0..1]
+        # self.occlusion = int(
+        #     annos["occluded"][idx]
+        # )  # 0=visible, 1=partly occluded, 2=fully occluded, 3=unknown
         self.alpha = annos["alpha"][idx]  # object observation angle [-pi..pi]
 
         # extract 2d bounding box in 0-based coordinates
@@ -279,6 +279,29 @@ def show_lidar_with_boxes(pc_velo, objects, calib):
         p3d.add_line([x1, y1, z1], [x2, y2, z2])
     p3d.show()
 
+def show_trajectory(gt_objects,dt_objects,gt_plt,dt_plt,overlap,idx):
+    obj = gt_objects[idx]
+    box3d_pts_3d = compute_box_3d_track(obj.l,obj.w,obj.h,obj.rz,*obj.t)
+    for k in range(4):
+        i, j = k, (k + 1) % 4
+        gt_plt.plot([box3d_pts_3d[i,0],box3d_pts_3d[j,0]],[box3d_pts_3d[i,1],box3d_pts_3d[j,1]],color='r',linewidth=0.3)
+
+    track_id = -1
+    if np.array(overlap[idx]).max() > 0.2:
+        track_id = np.array(overlap[gt_objects.index(obj)]).argmax()
+    
+    if track_id != -1:
+        obj = dt_objects[track_id]
+        box3d_pts_3d = compute_box_3d_track(obj.l,obj.w,obj.h,obj.rz,*obj.t)
+        track = obj.track
+        np.random.seed(int(abs(track)))
+        c = np.random.rand(3)
+        for k in range(4):
+            i, j = k, (k + 1) % 4
+            dt_plt.plot([box3d_pts_3d[i,0],box3d_pts_3d[j,0]],[box3d_pts_3d[i,1],box3d_pts_3d[j,1]],color=c,linewidth=0.3)
+
+
+
 def show_bev_objects(lidar,lidar_1,lidar_2,gt_objects,dt_objects,output_dir,overlap = None, miss = None):
     points = lidar[:,:4]
     color_map = ['r','g','b','y']
@@ -293,7 +316,7 @@ def show_bev_objects(lidar,lidar_1,lidar_2,gt_objects,dt_objects,output_dir,over
 
     for obj in gt_objects:
         if obj.t[0]<-40 or obj.t[0]>40 or obj.t[1]<-40 or obj.t[1]>40:
-            continue
+            miss[obj.id] = -2
         
         if np.array(overlap[gt_objects.index(obj)]).max() > 0.25:
             miss[obj.id] = dt_objects[np.array(overlap[gt_objects.index(obj)]).argmax()].track
@@ -376,17 +399,53 @@ def inte_to_rgb(pc_inte):
     return np.stack([r, g, b, np.ones_like(r)]).transpose()
 
 # -----------------------------------------------------------------------------------------
+def track_vis(gt_annos,dt_annos,output_dir, track_id):
+    root_path = dt_annos[0]["metadata"]["image_prefix"]
+    gt_plt = plt.figure()
+    plt.xlim(-40,40)
+    plt.ylim(-40,40)
+    plt.rcParams['figure.dpi'] = 500
+    plt.rcParams['savefig.dpi'] = 500
+    gt_ax = gt_plt.add_subplot(1,1,1)
+    dt_plt = plt.figure()
+    plt.xlim(-40,40)
+    plt.ylim(-40,40)
+    plt.rcParams['figure.dpi'] = 500
+    plt.rcParams['savefig.dpi'] = 500
+    dt_ax = dt_plt.add_subplot(1,1,1)
+    
+    if gt_annos is not None:
+        overlap,_,_,_ = calculate_iou_partly(gt_annos,dt_annos,2,50,2,0.5)
+        dataset = lvx_object(root_path)
+        gt_image_idxes = [str(info["token"]) for info in gt_annos]
+        for idx in gt_image_idxes:
+            print(idx)
+            gt_objects = dataset.get_label_objects(gt_annos[gt_image_idxes.index(idx)])
+            dt_objects = dataset.get_label_objects(dt_annos[gt_image_idxes.index(idx)])
+
+            show_trajectory(gt_objects,dt_objects,gt_ax,dt_ax,overlap[gt_image_idxes.index(idx)],track_id)
+    
+    else:
+        raise NotImplemented
+
+    gt_img_path = os.path.join(output_dir,f"gt_tracject_{track_id}.png")
+    gt_plt.savefig(gt_img_path)
+    dt_img_path = os.path.join(output_dir,f"dt_tracject_{track_id}.png")
+    dt_plt.savefig(dt_img_path)
+
+# -----------------------------------------------------------------------------------------
 def lvx_vis(gt_annos,dt_annos,output_dir):
     root_path = dt_annos[0]["metadata"]["image_prefix"]
     
     if gt_annos is not None:
-        miss = np.zeros((22,len(gt_annos)))
+        miss = -3*np.ones((22,len(gt_annos)))
         overlap,_,_,_ = calculate_iou_partly(gt_annos,dt_annos,2,50,2,0.5)
         dataset = lvx_object(root_path)
         gt_image_idxes = [str(info["token"]) for info in gt_annos]
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         vot = cv2.VideoWriter(os.path.join(output_dir,"bev_video.mp4"),fourcc,10,(3200,2400),True)
         for idx in gt_image_idxes:
+            print(idx)
             points = dataset.get_lidar(idx)
             points = points[points[:,1]<40,:]
             points = points[points[:,0]<40,:]
@@ -400,7 +459,6 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
             points_1 = points_1[points_1[:,1]>-40,:]
             points_1 = points_1[points_1[:,0]>-40,:]
             points_1 = points_1[points_1[:,2]>0.1,:]
-            print(points.shape)
 
             if (gt_image_idxes.index(idx) < len(gt_image_idxes)-1):
                 points_2 = dataset.get_lidar(f'{int(idx)+1}')
@@ -432,6 +490,7 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
         vot = cv2.VideoWriter(os.path.join(output_dir,"beicao_video.mp4"),fourcc,10,(3200,2400),True)
         for count,dt_anno in enumerate(dt_annos):
             idx = dt_anno['metadata']['token']
+            print(idx)
 
             points = dataset.get_lidar(idx)
             points = points[points[:,1]<40,:]
@@ -439,7 +498,6 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
             points = points[points[:,1]>-40,:]
             points = points[points[:,0]>-40,:]
             points = points[points[:,2]>0.1,:]
-            print(points.shape)
 
             points_1 = dataset.get_lidar(f'{int(idx)-1}')
             points_1 = points_1[points_1[:,1]<40,:]
@@ -475,7 +533,7 @@ def lvx_vis_3d(gt_annos,dt_annos,output_dir):
 
     if gt_annos is not None:
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        vot = cv2.VideoWriter(os.path.join(output_dir,"beicao_video.mp4"),fourcc,10,(1600,1000),True)
+        vot = cv2.VideoWriter(os.path.join(output_dir,"bev_video_3d.mp4"),fourcc,10,(1600,1000),True)
         dataset = lvx_object(root_path)
         gt_image_idxes = [str(info["token"]) for info in gt_annos]
 
@@ -483,13 +541,39 @@ def lvx_vis_3d(gt_annos,dt_annos,output_dir):
             print(gt_annos[i]['token'])
             points = dataset.get_lidar(gt_annos[i]['token'])
             points = points[points[:,2]>0.1,:]
-            # gt_annos[i] = remove_dontcare(gt_annos[i])
+            gt_annos[i] = remove_dontcare(gt_annos[i])
             fig = draw_lidar(points,color=None,fig=fig, pts_mode = 'sphere')
             gt_corners = center_to_corner_box3d(gt_annos[i]['location'],gt_annos[i]['dimensions'], gt_annos[i]['rotation_y'])
             fig = draw_gt_boxes3d(gt_corners, gt_annos[i]['id'],color=(0,0,1),fig=fig)
             dt_corners = center_to_corner_box3d(dt_annos[i]['location'],dt_annos[i]['dimensions'], dt_annos[i]['rotation_y'])
             fig = draw_gt_boxes3d(dt_corners, dt_annos[i]['track_id'],color=(0,1,0),fig=fig)
-            img_path = os.path.join(output_dir,f"bev_imgs/lvx_{gt_annos[i]['token']}.png")
+            img_path = os.path.join(output_dir,f"bev_imgs/lvx_{gt_annos[i]['token']}_3d.png")
+            mlab.savefig(img_path)
+            mlab.clf(figure=fig)
+            img = cv2.imread(img_path)
+            vot.write(img)
+        vot.release()
+    else:
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        vot = cv2.VideoWriter(os.path.join(output_dir,"beicao_video_3d.mp4"),fourcc,10,(1600,1000),True)
+        dataset = lvx_object(root_path,split="testing")
+
+        for i in range(len(dt_annos)):
+            idx = dt_annos[i]['metadata']['token']
+            print(idx)
+            points = dataset.get_lidar(idx)
+            plane = points[points[:,2]<0.1,:]
+            points = points[points[:,2]>0.1,:]
+            fig = draw_lidar(points,color=None,fig=fig, pts_mode = 'sphere')
+            fig = draw_lidar(plane,color=None,fig=fig)
+            dt_corners = center_to_corner_box3d(dt_annos[i]['location'],dt_annos[i]['dimensions'], dt_annos[i]['rotation_y'])
+            color_list = np.zeros((dt_annos[i]['track_id'].shape[0],3))
+            for j in range(dt_annos[i]['track_id'].shape[0]):
+                np.random.seed(int(dt_annos[i]['track_id'][j]))
+                color_list[j] = np.random.rand(3)
+
+            fig = draw_gt_boxes3d(dt_corners, dt_annos[i]['track_id'],line_width=3,fig=fig,color_list=color_list,view_setting=(180,50,60))
+            img_path = os.path.join(output_dir,f"beicao_imgs/lvx_{idx}_3d.png")
             mlab.savefig(img_path)
             mlab.clf(figure=fig)
             img = cv2.imread(img_path)

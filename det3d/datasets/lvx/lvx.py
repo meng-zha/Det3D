@@ -10,7 +10,7 @@ from det3d.datasets.registry import DATASETS
 
 from .lvx_common import *
 from .eval import get_official_eval_result
-from .lvx_vis import lvx_vis, lvx_vis_3d
+from .lvx_vis import lvx_vis, lvx_vis_3d, track_vis
 from .lvx_track import lvx_track
 
 
@@ -166,7 +166,10 @@ class LvxDataset(PointCloudDataset):
             dt_annos = lvx_track(dt_annos)
 
         if vis:
-            lvx_vis(gt_annos,dt_annos,output_dir)
+            # lvx_vis(gt_annos,dt_annos,output_dir)
+            lvx_vis_3d(gt_annos,dt_annos,output_dir)
+            # for track_id in range(22):
+            #     track_vis(gt_annos,dt_annos,output_dir,track_id)
 
         # firstly convert standard detection to lvx-format dt annos
         z_axis = 2  # KITTI camera format use y as regular "z" axis.

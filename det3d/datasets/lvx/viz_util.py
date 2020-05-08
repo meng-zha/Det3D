@@ -89,7 +89,7 @@ def draw_lidar(pc, color=None, fig=None, bgcolor=(0,0,0), pts_scale=1, pts_mode=
     mlab.view(azimuth=0, elevation=50, focalpoint=[0,0,0], distance=150.0, figure=fig)
     return fig
 
-def draw_gt_boxes3d(gt_boxes3d,track_id, fig, color=(1,1,1), line_width=1, draw_text=True, text_scale=(0.75,0.75,0.75), color_list=None):
+def draw_gt_boxes3d(gt_boxes3d,track_id, fig, color=(1,1,1), line_width=1, draw_text=True, text_scale=(0.75,0.75,0.75), color_list=None, view_setting=(270,50,100)):
     ''' Draw 3D bounding boxes
     Args:
         gt_boxes3d: numpy array (n,8) for XYZ ranges and the track_id of the box 
@@ -106,8 +106,8 @@ def draw_gt_boxes3d(gt_boxes3d,track_id, fig, color=(1,1,1), line_width=1, draw_
     for n in range(num):
         b = gt_boxes3d[n]
         if color_list is not None:
-            color = color_list[n] 
-        if draw_text: mlab.text3d(b[3,0], b[3,1], b[3,2], '%d'%(int(track_id[n])%101), scale=text_scale, color=color, figure=fig)
+            color = tuple(color_list[n])
+        if draw_text: mlab.text3d(b[3,0], b[3,1], b[2,2], '%d'%(int(track_id[n])%101), scale=text_scale, color=color, figure=fig)
         for k in range(0,4):
             #http://docs.enthought.com/mayavi/mayavi/auto/mlab_helper_functions.html
             i,j=k,(k+1)%4
@@ -119,5 +119,5 @@ def draw_gt_boxes3d(gt_boxes3d,track_id, fig, color=(1,1,1), line_width=1, draw_
             i,j=k,k+4
             mlab.plot3d([b[i,0], b[j,0]], [b[i,1], b[j,1]], [b[i,2], b[j,2]], color=color, tube_radius=None, line_width=line_width, figure=fig)
 
-    mlab.view(azimuth=270, elevation=50, focalpoint=[ 0 , 0, -1], distance=100, figure=fig)
+    mlab.view(azimuth=view_setting[0], elevation=view_setting[1], focalpoint=[ 0 , 0, -1], distance=view_setting[2], figure=fig)
     return fig
