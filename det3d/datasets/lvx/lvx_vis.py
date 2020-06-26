@@ -572,7 +572,9 @@ def lvx_vis_3d(gt_annos,dt_annos,output_dir):
                 np.random.seed(int(dt_annos[i]['track_id'][j]))
                 color_list[j] = np.random.rand(3)
 
-            fig = draw_gt_boxes3d(dt_corners, dt_annos[i]['track_id'],line_width=3,fig=fig,color_list=color_list,view_setting=(180,50,60))
+            view_setting = [180+30*np.sin(np.pi/100.*i),50+20*np.sin(np.pi/200.*i),60-20*np.sin(np.pi/100*i)]
+            print(view_setting)
+            fig = draw_gt_boxes3d(dt_corners, dt_annos[i]['track_id'],line_width=3,fig=fig,color_list=color_list,view_setting=view_setting)
             img_path = os.path.join(output_dir,f"beicao_imgs/lvx_{idx}_3d.png")
             mlab.savefig(img_path)
             mlab.clf(figure=fig)

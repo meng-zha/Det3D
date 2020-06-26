@@ -86,7 +86,7 @@ def draw_lidar(pc, color=None, fig=None, bgcolor=(0,0,0), pts_scale=1, pts_mode=
     mlab.plot3d([x1, x2], [y2, y2], [0,0], color=(0.5,0.5,0.5), tube_radius=0.1, line_width=0.5, figure=fig)
     
     #mlab.orientation_axes()
-    mlab.view(azimuth=0, elevation=50, focalpoint=[0,0,0], distance=150.0, figure=fig)
+    mlab.view(azimuth=0, elevation=50, focalpoint=[0,0,0], distance=150.0)
     return fig
 
 def draw_gt_boxes3d(gt_boxes3d,track_id, fig, color=(1,1,1), line_width=1, draw_text=True, text_scale=(0.75,0.75,0.75), color_list=None, view_setting=(270,50,100)):

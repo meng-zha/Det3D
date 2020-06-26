@@ -233,7 +233,7 @@ data = dict(
         root_path=data_root,
         info_path=data_root + "/lvx_infos_test.pkl",
         ann_file=test_anno,
-        # start_idx = [[0,20]],
+        # start_idx = [[0,100]],
         class_names=class_names,
         pipeline=test_pipeline,
     ),
