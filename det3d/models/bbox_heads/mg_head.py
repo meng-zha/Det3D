@@ -144,10 +144,14 @@ def create_loss(
     loc_loss_ftor,
     cls_loss_ftor,
     box_preds,
+    box_preds_1,
+    box_preds_2,
     cls_preds,
     cls_targets,
     cls_weights,
     reg_targets,
+    reg_targets_1,
+    reg_targets_2,
     reg_weights,
     num_class,
     encode_background_as_zeros=True,
@@ -161,6 +165,8 @@ def create_loss(
         box_preds = box_preds.view(batch_size, -1, box_code_size - 2)
     else:
         box_preds = box_preds.view(batch_size, -1, box_code_size)
+        box_preds_1 = box_preds_1.view(batch_size, -1, box_code_size)
+        box_preds_2 = box_preds_2.view(batch_size, -1, box_code_size)
 
     if encode_background_as_zeros:
         cls_preds = cls_preds.view(batch_size, -1, num_class)
@@ -176,13 +182,22 @@ def create_loss(
     if encode_rad_error_by_sin:
         # sin(a - b) = sinacosb-cosasinb
         box_preds, reg_targets = add_sin_difference(box_preds, reg_targets)
+        box_preds_1, reg_targets_1 = add_sin_difference(box_preds_1, reg_targets_1)
+        box_preds_2, reg_targets_2 = add_sin_difference(box_preds_2, reg_targets_2)
 
     loc_losses = loc_loss_ftor(box_preds, reg_targets, weights=reg_weights)  # [N, M]
+    loc_losses_1 = loc_loss_ftor(box_preds_1, reg_targets_1, weights=reg_weights)  # [N, M]
+    loc_losses_2 = loc_loss_ftor(box_preds_2, reg_targets_2, weights=reg_weights)  # [N, M]
     cls_losses = cls_loss_ftor(
         cls_preds, one_hot_targets, weights=cls_weights
     )  # [N, M]
 
-    return loc_losses, cls_losses
+    return loc_losses, loc_losses_1,loc_losses_2,cls_losses
+
+def iou_loss(box_preds,reg_targets,iou_loss_ftor,reg_weights):
+    batch_size = int(box_preds.shape[0])
+    box_preds = box_preds.view(batch_size, -1, 7)
+    return iou_loss_ftor(box_preds,reg_targets,reg_weights)
 
 
 class LossNormType(Enum):
@@ -210,6 +225,8 @@ class Head(nn.Module):
         self.use_dir = use_dir
 
         self.conv_box = nn.Conv2d(num_input, num_pred, 1)
+        self.conv_box_1 = nn.Conv2d(num_input, num_pred, 1)
+        self.conv_box_2 = nn.Conv2d(num_input, num_pred, 1)
         self.conv_cls = nn.Conv2d(num_input, num_cls, 1)
 
         if self.use_dir:
@@ -218,11 +235,18 @@ class Head(nn.Module):
     def forward(self, x):
         ret_list = []
         box_preds = self.conv_box(x).permute(0, 2, 3, 1).contiguous()
+        box_preds_1 = self.conv_box_1(x).permute(0, 2, 3, 1).contiguous()
+        box_preds_2 = self.conv_box_2(x).permute(0, 2, 3, 1).contiguous()
         cls_preds = self.conv_cls(x).permute(0, 2, 3, 1).contiguous()
-        ret_dict = {"box_preds": box_preds, "cls_preds": cls_preds}
+        ret_dict = {"box_preds": box_preds, "cls_preds": cls_preds, "box_preds_1": box_preds_1,"box_preds_2": box_preds_2}
         if self.use_dir:
             dir_preds = self.conv_dir(x).permute(0, 2, 3, 1).contiguous()
             ret_dict["dir_cls_preds"] = dir_preds
+            # 暂时不加其余两帧的方向分类预测
+            # dir_preds_1 = self.conv_dir_1(x).permute(0, 2, 3, 1).contiguous()
+            # ret_dict["dir_cls_preds_1"] = dir_preds_1
+            # dir_preds_2 = self.conv_dir_2(x).permute(0, 2, 3, 1).contiguous()
+            # ret_dict["dir_cls_preds_2"] = dir_preds_2
 
         return ret_dict
 
@@ -400,6 +424,7 @@ class MultiGroupHead(nn.Module):
         loss_cls=dict(type="CrossEntropyLoss", use_sigmoid=False, loss_weight=1.0,),
         use_sigmoid_score=True,
         loss_bbox=dict(type="SmoothL1Loss", beta=1.0, loss_weight=1.0,),
+        loss_iou=dict(type="DIoULoss", loss_weight=1.0,),
         encode_rad_error_by_sin=True,
         loss_aux=None,
         direction_offset=0.0,
@@ -429,6 +454,7 @@ class MultiGroupHead(nn.Module):
 
         self.loss_cls = build_loss(loss_cls)
         self.loss_reg = build_loss(loss_bbox)
+        self.loss_iou = build_loss(loss_iou)
         if loss_aux is not None:
             self.loss_aux = build_loss(loss_aux)
 
@@ -528,6 +554,7 @@ class MultiGroupHead(nn.Module):
     def prepare_loss_weights(
         self,
         labels,
+        reg_weights,
         loss_norm=dict(
             type="NormByNumPositives", pos_cls_weight=1.0, neg_cls_weight=1.0,
         ),
@@ -543,7 +570,7 @@ class MultiGroupHead(nn.Module):
         negatives = labels == 0
         negative_cls_weights = negatives.type(dtype) * neg_cls_weight
         cls_weights = negative_cls_weights + pos_cls_weight * positives.type(dtype)
-        reg_weights = positives.type(dtype)
+        # reg_weights = positives.type(dtype)
         if loss_norm_type == LossNormType.NormByNumExamples:
             num_examples = cared.type(dtype).sum(1, keepdim=True)
             num_examples = torch.clamp(num_examples, min=1.0)
@@ -585,29 +612,42 @@ class MultiGroupHead(nn.Module):
             num_class = self.num_classes[task_id]
 
             box_preds = preds_dict["box_preds"]
+            box_preds_1 = preds_dict["box_preds_1"]
+            box_preds_2 = preds_dict["box_preds_2"]
             cls_preds = preds_dict["cls_preds"]
 
+
+            # TODO: 添加了其他两帧的loc loss
             labels = example["labels"][task_id]
             if kwargs.get("mode", False):
                 reg_targets = example["reg_targets"][task_id][:, :, [0, 1, 3, 4, 6]]
-                reg_targets_left = example["reg_targets"][task_id][:, :, [2, 5]]
+                reg_targets_1 = example["reg_targets_1"][task_id][:, :, [0, 1, 3, 4, 6]]
+                reg_targets_2 = example["reg_targets_2"][task_id][:, :, [0, 1, 3, 4, 6]]
             else:
                 reg_targets = example["reg_targets"][task_id]
+                reg_targets_1 = example["reg_targets_1"][task_id]
+                reg_targets_2 = example["reg_targets_2"][task_id]
+
+            reg_weights = example["reg_weights"][task_id]
 
             cls_weights, reg_weights, cared = self.prepare_loss_weights(
-                labels, loss_norm=self.loss_norm, dtype=torch.float32,
+                labels, reg_weights, loss_norm=self.loss_norm,dtype=torch.float32,
             )
             cls_targets = labels * cared.type_as(labels)
             cls_targets = cls_targets.unsqueeze(-1)
 
-            loc_loss, cls_loss = create_loss(
+            loc_loss,loc_loss_1,loc_loss_2, cls_loss = create_loss(
                 self.loss_reg,
                 self.loss_cls,
                 box_preds,
+                box_preds_1,
+                box_preds_2,
                 cls_preds,
                 cls_targets,
                 cls_weights,
                 reg_targets,
+                reg_targets_1,
+                reg_targets_2,
                 reg_weights,
                 num_class,
                 self.encode_background_as_zeros,
@@ -616,15 +656,52 @@ class MultiGroupHead(nn.Module):
                 box_code_size=self.box_n_dim,
             )
 
+            # 增加了iou loss
+            # batch_size = batch_anchors[task_id].shape[0]
+            # batch_task_anchors = example["anchors"][task_id].view(
+            #     batch_size, -1, self.box_n_dim
+            # )
+            # batch_box_preds = preds_dict["box_preds"].view(batch_size, -1, self.box_n_dim)
+            # batch_box_preds_1 = preds_dict["box_preds_1"].view(batch_size, -1, self.box_n_dim)
+            # batch_box_preds_2 = preds_dict["box_preds_2"].view(batch_size, -1, self.box_n_dim)
+            # batch_reg_preds = self.box_coder.decode_torch(
+            #     batch_box_preds[:, :, : self.box_coder.code_size], batch_task_anchors
+            # )
+            # targets_preds = self.box_coder.decode_torch(
+            #     reg_targets[:, :, : self.box_coder.code_size], batch_task_anchors
+            # )
+            # iou_loss_reduced = iou_loss(batch_reg_preds,targets_preds,self.loss_iou,reg_weights).sum()/batch_size_device
+            # batch_reg_preds_1 = self.box_coder.decode_torch(
+            #     batch_box_preds_1[:, :, : self.box_coder.code_size], batch_task_anchors
+            # )
+            # targets_preds_1 = self.box_coder.decode_torch(
+            #     reg_targets_1[:, :, : self.box_coder.code_size], batch_task_anchors
+            # )
+            # iou_loss_reduced_1 = iou_loss(batch_reg_preds_1,targets_preds_1,self.loss_iou,reg_weights).sum()/batch_size_device
+            # batch_reg_preds_2 = self.box_coder.decode_torch(
+            #     batch_box_preds_2[:, :, : self.box_coder.code_size], batch_task_anchors
+            # )
+            # targets_preds_2 = self.box_coder.decode_torch(
+            #     reg_targets_2[:, :, : self.box_coder.code_size], batch_task_anchors
+            # )
+            # iou_loss_reduced_2 = iou_loss(batch_reg_preds_2,targets_preds_2,self.loss_iou,reg_weights).sum()/batch_size_device
+
             loc_loss_reduced = loc_loss.sum() / batch_size_device
             loc_loss_reduced *= self.loss_reg._loss_weight
+            loc_loss_reduced_1 = loc_loss_1.sum() / batch_size_device
+            loc_loss_reduced_1 *= self.loss_reg._loss_weight
+            loc_loss_reduced_2 = loc_loss_2.sum() / batch_size_device
+            loc_loss_reduced_2 *= self.loss_reg._loss_weight
+
             cls_pos_loss, cls_neg_loss = _get_pos_neg_loss(cls_loss, labels)
             cls_pos_loss /= self.loss_norm["pos_cls_weight"]
             cls_neg_loss /= self.loss_norm["neg_cls_weight"]
             cls_loss_reduced = cls_loss.sum() / batch_size_device
             cls_loss_reduced *= self.loss_cls._loss_weight
 
-            loss = loc_loss_reduced + cls_loss_reduced
+            # loss = loc_loss_reduced + cls_loss_reduced
+            loss = loc_loss_reduced + cls_loss_reduced+loc_loss_reduced_1+loc_loss_reduced_2 
+            # loss = loss + iou_loss_reduced+iou_loss_reduced_1+iou_loss_reduced_2
 
             if self.use_direction_classifier:
                 dir_targets = get_direction_target(
@@ -654,6 +731,11 @@ class MultiGroupHead(nn.Module):
                 else None,
                 "cls_loss_reduced": cls_loss_reduced.detach().cpu().mean(),
                 "loc_loss_reduced": loc_loss_reduced.detach().cpu().mean(),
+                "loc_loss_reduced_1": loc_loss_reduced_1.detach().cpu().mean(),
+                "loc_loss_reduced_2": loc_loss_reduced_2.detach().cpu().mean(),
+                # "iou_loss_reduced":iou_loss_reduced.detach().cpu().mean(),
+                # "iou_loss_reduced_1":iou_loss_reduced_1.detach().cpu().mean(),
+                # "iou_loss_reduced_2":iou_loss_reduced_2.detach().cpu().mean(),
                 "loc_loss_elem": [elem.detach().cpu() for elem in loc_loss_elem],
                 "num_pos": (labels > 0)[0].sum(),
                 "num_neg": (labels == 0)[0].sum(),
@@ -726,6 +808,8 @@ class MultiGroupHead(nn.Module):
                 )
 
             batch_box_preds = preds_dict["box_preds"]
+            batch_box_preds_1 = preds_dict["box_preds_1"]
+            batch_box_preds_2 = preds_dict["box_preds_2"]
             batch_cls_preds = preds_dict["cls_preds"]
 
             if self.bev_only:
@@ -737,8 +821,16 @@ class MultiGroupHead(nn.Module):
                 batch_box_preds_base = batch_box_preds.view(batch_size, -1, box_ndim)
                 batch_box_preds = batch_task_anchors.clone()
                 batch_box_preds[:, :, [0, 1, 3, 4, 6]] = batch_box_preds_base
+                batch_box_preds_base_1 = batch_box_preds_1.view(batch_size, -1, box_ndim)
+                batch_box_preds_1 = batch_task_anchors.clone()
+                batch_box_preds_1[:, :, [0, 1, 3, 4, 6]] = batch_box_preds_base_1
+                batch_box_preds_base_2 = batch_box_preds_2.view(batch_size, -1, box_ndim)
+                batch_box_preds_2 = batch_task_anchors.clone()
+                batch_box_preds_2[:, :, [0, 1, 3, 4, 6]] = batch_box_preds_base_2
             else:
                 batch_box_preds = batch_box_preds.view(batch_size, -1, box_ndim)
+                batch_box_preds_1 = batch_box_preds_1.view(batch_size, -1, box_ndim)
+                batch_box_preds_2 = batch_box_preds_2.view(batch_size, -1, box_ndim)
 
             num_class_with_bg = self.num_classes[task_id]
 
@@ -749,6 +841,12 @@ class MultiGroupHead(nn.Module):
 
             batch_reg_preds = self.box_coder.decode_torch(
                 batch_box_preds[:, :, : self.box_coder.code_size], batch_task_anchors
+            )
+            batch_reg_preds_1 = self.box_coder.decode_torch(
+                batch_box_preds_1[:, :, : self.box_coder.code_size], batch_task_anchors
+            )
+            batch_reg_preds_2 = self.box_coder.decode_torch(
+                batch_box_preds_2[:, :, : self.box_coder.code_size], batch_task_anchors
             )
 
             if self.use_direction_classifier:
@@ -763,6 +861,8 @@ class MultiGroupHead(nn.Module):
                     test_cfg,
                     batch_cls_preds,
                     batch_reg_preds,
+                    batch_reg_preds_1,
+                    batch_reg_preds_2,
                     batch_dir_preds,
                     batch_anchors_mask,
                     meta_list,
@@ -780,7 +880,7 @@ class MultiGroupHead(nn.Module):
         for i in range(num_samples):
             ret = {}
             for k in rets[0][i].keys():
-                if k in ["box3d_lidar", "scores"]:
+                if k in ["box3d_lidar", "scores","box3d_lidar_1","box3d_lidar_2"]:
                     ret[k] = torch.cat([ret[i][k] for ret in rets])
                 elif k in ["label_preds"]:
                     flag = 0
@@ -802,6 +902,8 @@ class MultiGroupHead(nn.Module):
         test_cfg,
         batch_cls_preds,
         batch_reg_preds,
+        batch_reg_preds_1,
+        batch_reg_preds_2,
         batch_dir_preds=None,
         batch_anchors_mask=None,
         meta_list=None,
@@ -815,8 +917,10 @@ class MultiGroupHead(nn.Module):
                 device=batch_reg_preds.device,
             )
 
-        for box_preds, cls_preds, dir_preds, a_mask, meta in zip(
+        for box_preds,box_preds_1,box_preds_2, cls_preds, dir_preds, a_mask, meta in zip(
             batch_reg_preds,
+            batch_reg_preds_1,
+            batch_reg_preds_2,
             batch_cls_preds,
             batch_dir_preds,
             batch_anchors_mask,
@@ -824,9 +928,13 @@ class MultiGroupHead(nn.Module):
         ):
             if a_mask is not None:
                 box_preds = box_preds[a_mask]
+                box_preds_1 = box_preds_1[a_mask]
+                box_preds_2 = box_preds_2[a_mask]
                 cls_preds = cls_preds[a_mask]
 
             box_preds = box_preds.float()
+            box_preds_1 = box_preds_1.float()
+            box_preds_2 = box_preds_2.float()
             cls_preds = cls_preds.float()
 
             if self.use_direction_classifier:
@@ -995,10 +1103,14 @@ class MultiGroupHead(nn.Module):
                 if top_scores.shape[0] != 0:
                     if test_cfg.score_threshold > 0.0:
                         box_preds = box_preds[top_scores_keep]
+                        box_preds_1 = box_preds_1[top_scores_keep]
+                        box_preds_2 = box_preds_2[top_scores_keep]
                         if self.use_direction_classifier:
                             dir_labels = dir_labels[top_scores_keep]
                         top_labels = top_labels[top_scores_keep]
                     boxes_for_nms = box_preds[:, [0, 1, 3, 4, -1]]
+                    boxes_for_nms_1 = box_preds_1[:, [0, 1, 3, 4, -1]]
+                    boxes_for_nms_2 = box_preds_2[:, [0, 1, 3, 4, -1]]
                     if not test_cfg.nms.use_rotate_nms:
                         box_preds_corners = box_torch_ops.center_to_corner_box2d(
                             boxes_for_nms[:, :2],
@@ -1008,6 +1120,22 @@ class MultiGroupHead(nn.Module):
                         boxes_for_nms = box_torch_ops.corner_to_standup_nd(
                             box_preds_corners
                         )
+                        box_preds_corners_1 = box_torch_ops.center_to_corner_box2d(
+                            boxes_for_nms_1[:, :2],
+                            boxes_for_nms_1[:, 2:4],
+                            boxes_for_nms_1[:, 4],
+                        )
+                        boxes_for_nms_1 = box_torch_ops.corner_to_standup_nd(
+                            box_preds_corners_1
+                        )
+                        box_preds_corners_2 = box_torch_ops.center_to_corner_box2d(
+                            boxes_for_nms_2[:, :2],
+                            boxes_for_nms_2[:, 2:4],
+                            boxes_for_nms_2[:, 4],
+                        )
+                        boxes_for_nms_2 = box_torch_ops.corner_to_standup_nd(
+                            box_preds_corners_2
+                        )
                     # the nms in 3d detection just remove overlap boxes.
                     selected = nms_func(
                         boxes_for_nms,
@@ -1016,10 +1144,29 @@ class MultiGroupHead(nn.Module):
                         post_max_size=test_cfg.nms.nms_post_max_size,
                         iou_threshold=test_cfg.nms.nms_iou_threshold,
                     )
+                    selected_1 = nms_func(
+                        boxes_for_nms_1,
+                        top_scores,
+                        pre_max_size=test_cfg.nms.nms_pre_max_size,
+                        post_max_size=test_cfg.nms.nms_post_max_size,
+                        iou_threshold=test_cfg.nms.nms_iou_threshold,
+                    )
+                    selected_2 = nms_func(
+                        boxes_for_nms_2,
+                        top_scores,
+                        pre_max_size=test_cfg.nms.nms_pre_max_size,
+                        post_max_size=test_cfg.nms.nms_post_max_size,
+                        iou_threshold=test_cfg.nms.nms_iou_threshold,
+                    )
                 else:
                     selected = []
+                    selected_1 = []
+                    selected_2 = []
                 # if selected is not None:
                 selected_boxes = box_preds[selected]
+                # TODO: 这里的select对于其他两帧是否需要nms
+                selected_boxes_1 = box_preds_1[selected]
+                selected_boxes_2 = box_preds_2[selected]
                 if self.use_direction_classifier:
                     selected_dir_labels = dir_labels[selected]
                 selected_labels = top_labels[selected]
@@ -1030,6 +1177,8 @@ class MultiGroupHead(nn.Module):
             if selected_boxes.shape[0] != 0:
                 # self.logger.info(f"result not none~ Selected boxes: {selected_boxes.shape}")
                 box_preds = selected_boxes
+                box_preds_1 = selected_boxes_1
+                box_preds_2 = selected_boxes_2
                 scores = selected_scores
                 label_preds = selected_labels
                 if self.use_direction_classifier:
@@ -1043,6 +1192,8 @@ class MultiGroupHead(nn.Module):
                         torch.tensor(0.0).type_as(box_preds),
                     )
                 final_box_preds = box_preds
+                final_box_preds_1 = box_preds_1
+                final_box_preds_2 = box_preds_2
                 final_scores = scores
                 final_labels = label_preds
                 if post_center_range is not None:
@@ -1050,6 +1201,8 @@ class MultiGroupHead(nn.Module):
                     mask &= (final_box_preds[:, :3] <= post_center_range[3:]).all(1)
                     predictions_dict = {
                         "box3d_lidar": final_box_preds[mask],
+                        "box3d_lidar_1": final_box_preds_1[mask],
+                        "box3d_lidar_2": final_box_preds_2[mask],
                         "scores": final_scores[mask],
                         "label_preds": label_preds[mask],
                         "metadata": meta,
@@ -1057,6 +1210,8 @@ class MultiGroupHead(nn.Module):
                 else:
                     predictions_dict = {
                         "box3d_lidar": final_box_preds,
+                        "box3d_lidar_1": final_box_preds_1,
+                        "box3d_lidar_2": final_box_preds_2,
                         "scores": final_scores,
                         "label_preds": label_preds,
                         "metadata": meta,
@@ -1066,6 +1221,8 @@ class MultiGroupHead(nn.Module):
                 device = batch_reg_preds.device
                 predictions_dict = {
                     "box3d_lidar": torch.zeros([0, self.box_n_dim], dtype=dtype, device=device),
+                    "box3d_lidar_1": torch.zeros([0, self.box_n_dim], dtype=dtype, device=device),
+                    "box3d_lidar_2": torch.zeros([0, self.box_n_dim], dtype=dtype, device=device),
                     "scores": torch.zeros([0], dtype=dtype, device=device),
                     "label_preds": torch.zeros(
                         [0], dtype=top_labels.dtype, device=device

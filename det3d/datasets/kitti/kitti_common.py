@@ -555,7 +555,10 @@ def remove_dontcare(image_anno):
         i for i, x in enumerate(image_anno["name"]) if x != "DontCare"
     ]
     for key in image_anno.keys():
-        img_filtered_annotations[key] = image_anno[key][relevant_annotation_indices]
+        if key != 'token':
+            img_filtered_annotations[key] = image_anno[key][relevant_annotation_indices]
+        else:
+            img_filtered_annotations[key] = image_anno[key]
     return img_filtered_annotations
 
 

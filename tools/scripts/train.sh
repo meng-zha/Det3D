@@ -1,7 +1,7 @@
 #!/bin/bash
 TASK_DESC=$1
 DATE_WITH_TIME=`date "+%Y%m%d-%H%M%S"`
-OUT_DIR='/home/zhangm/Det3D/Outputs/Det3D_Outputs'
+OUT_DIR='/Extra/zhangmeng/3d_detection/Outputs/Det3D_Outputs'
 
 NUSC_CBGS_WORK_DIR=$OUT_DIR/NUSC_CBGS_$TASK_DESC\_$DATE_WITH_TIME
 LYFT_CBGS_WORK_DIR=$OUT_DIR/LYFT_CBGS_$TASK_DESC\_$DATE_WITH_TIME
@@ -25,4 +25,4 @@ fi
 # python -m torch.distributed.launch --nproc_per_node=1 ./tools/train.py ./examples/point_pillars/configs/kitti_point_pillars_mghead_syncbn.py  --work_dir=$PP_WORK_DIR 
 # python ./tools/train.py --local_rank=0 --work_dir=$PP_WORK_DIR ./examples/point_pillars/configs/kitti_pedestrian_point_pillars_mghead_syncbn.py --resume_from=Outputs/Det3D_Outputs/PointPillars_point_pillars_pedestrian_20200211-140512/epoch_99.pth
 # CUDA_VISIBLE_DEVICES=2 python ./tools/train.py --work_dir=$PP_WORK_DIR --local_rank=0 ./examples/point_pillars/configs/kitti_point_pillars_mghead_syncbn.py 
-CUDA_VISIBLE_DEVICES=1 python -W ignore ./tools/train.py --work_dir=$PP_WORK_DIR --local_rank=0 ./examples/point_pillars/configs/lvx_pedestrian_point_pillars.py 
+CUDA_VISIBLE_DEVICES=4 python -W ignore ./tools/train.py --work_dir=$PP_WORK_DIR --local_rank=0 ./examples/point_pillars/configs/lvx_pedestrian_point_pillars.py 

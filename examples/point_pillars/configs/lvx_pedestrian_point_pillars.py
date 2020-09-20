@@ -19,7 +19,7 @@ target_assigner = dict(
     anchor_generators=[
         dict(
             type="anchor_generator_range",
-            sizes=[0.6, 0.8, 1.8],
+            sizes=[0.5, 0.8, 1.8],
             anchor_ranges=[-40, -40.0, 0.9, 40.0, 40.0, 0.9],
             strides=[0.4, 0.4, 0.0], # if generate only 1 z_center, z_stride will be ignored
             offsets=[-39.8, -39.8, 0.9], # origin_offset + strides / 2 TODO: offsets
@@ -40,20 +40,29 @@ box_coder = dict(
     type="ground_box3d_coder", n_dim=7, linear_dim=False, encode_angle_vector=False,
 )
 
+voxel_generator = dict(
+    range=[-40, -40, -0.1, 40, 40, 2.0],
+    voxel_size=[80./320, 80./320, 2.0],
+    max_points_in_voxel=50,
+    max_voxel_num=20000,
+)
+
 # model settings
 model = dict(
     type="PointPillars",
     pretrained=None,
     reader=dict(
-        num_input_features=6,
+        num_input_features=3,
         type="PillarFeatureNet",
         num_filters=[64],
         with_distance=False,
+        voxel_size=voxel_generator['voxel_size'],
+        pc_range=voxel_generator['range'],
         norm_cfg=norm_cfg,
     ),
     backbone=dict(type="PointPillarsScatter", ds_factor=1, norm_cfg=norm_cfg,),
     neck=dict(
-        type="RPN",
+        type="RPN_LVX",
         layer_nums=[3, 5, 5],
         ds_layer_strides=[1, 2, 2],
         ds_num_filters=[128, 128, 256],
@@ -77,6 +86,7 @@ model = dict(
             type="NormByNumPositives", pos_cls_weight=1.0, neg_cls_weight=1.0,
         ),
         loss_cls=dict(type="SigmoidFocalLoss", alpha=0.25, gamma=2.0, loss_weight=0.1,),
+        loss_iou=dict(type="DIoULoss", loss_weight=0.0,),
         use_sigmoid_score=True,
         loss_bbox=dict(
             type="WeightedSmoothL1Loss",
@@ -112,22 +122,23 @@ test_cfg = dict(
         nms_post_max_size=30,
         nms_iou_threshold=0.1,
     ),
-    score_threshold=0.2,
+    score_threshold=0.3,
+    # score_threshold=0.2,
     post_center_limit_range=[-40, -40.0, -0.1, 40.0, 40.0, 2.5],
     max_per_img=100,
 )
 
 # dataset settings
 dataset_type = "LvxDataset"
-data_root = "/data3/3d_detection/BBOX_x2_Vel"
+data_root = "/Extra/zhangmeng/3d_detection/BBOX_x4_track"
 
 db_sampler = dict(
     type="GT-AUG",
     enable=True,
     db_info_path=data_root+"/dbinfos_train.pkl",
-    sample_groups=[dict(Pedestrian=8,),],
+    sample_groups=[dict(Pedestrian=0,),],
     db_prep_steps=[
-        dict(filter_by_min_num_points=dict(Pedestrian=3,)),
+        dict(filter_by_min_num_points=dict(Pedestrian=1,)),
         dict(filter_by_difficulty=[-1],),
     ],
     global_random_rotation_range_per_object=[0, 0],
@@ -136,7 +147,7 @@ db_sampler = dict(
 train_preprocessor = dict(
     mode="train",
     shuffle_points=True,
-    gt_loc_noise=[0.15, 0.15, 0.15],
+    gt_loc_noise=[0.15, 0.15, 0],
     gt_rot_noise=[-0.15707963267, 0.15707963267],
     global_rot_noise=[-0.78539816, 0.78539816],
     global_scale_noise=[0.95, 1.05],
@@ -163,13 +174,6 @@ test_preprocessor = dict(
     shuffle_points=False,
     remove_environment=False,
     remove_unknown_examples=False,
-)
-
-voxel_generator = dict(
-    range=[-40, -40, -0.1, 40, 40, 2.0],
-    voxel_size=[0.25, 0.25, 2.0],
-    max_points_in_voxel=50,
-    max_voxel_num=160000,
 )
 
 train_pipeline = [
@@ -200,7 +204,9 @@ test_pipeline = [
 
 train_anno = data_root+"/lvx_infos_train.pkl"
 val_anno = data_root+"/lvx_infos_val.pkl"
+# test_anno = data_root+"/lvx_infos_test.pkl"
 test_anno = None
+start_idx = [[0,115],[117,332],[333,560]] # 训练集为三段
 
 data = dict(
     samples_per_gpu=2,
@@ -211,6 +217,7 @@ data = dict(
         info_path=data_root + "/lvx_infos_train.pkl",
         ann_file=train_anno,
         class_names=class_names,
+        start_idx = start_idx,
         pipeline=train_pipeline,
     ),
     val=dict(
@@ -218,14 +225,17 @@ data = dict(
         root_path=data_root,
         info_path=data_root + "/lvx_infos_val.pkl",
         ann_file=val_anno,
+        # start_idx = [[0,50]],
         class_names=class_names,
         pipeline=val_pipeline,
     ),
     test=dict(
         type=dataset_type,
         root_path=data_root,
+        test_mode=True,
         info_path=data_root + "/lvx_infos_test.pkl",
         ann_file=test_anno,
+        # start_idx = [[0,100]],
         class_names=class_names,
         pipeline=test_pipeline,
     ),
@@ -251,7 +261,7 @@ optimizer = dict(
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 # learning policy in training hooks
 lr_config = dict(
-    type="one_cycle", lr_max=3e-3, moms=[0.95, 0.85], div_factor=10.0, pct_start=0.4,
+    type="one_cycle", lr_max=1e-3, moms=[0.95, 0.85], div_factor=10.0, pct_start=0.4,
 )
 
 checkpoint_config = dict(interval=5)
@@ -265,11 +275,11 @@ log_config = dict(
 )
 # yapf:enable
 # runtime settings
-total_epochs = 100
-device_ids = range(4)
+total_epochs = 200
+device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"
-work_dir = "/data/Outputs/det3d_Outputs/Point_Pillars"
+work_dir = "/Extra/zhangmeng/Outputs/det3d_Outputs/Point_Pillars"
 load_from = None
 resume_from = None
 workflow = [("train", 5),("val",1)]

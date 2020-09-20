@@ -85,15 +85,16 @@ def example_to_device(example, device=None, non_blocking=False) -> dict:
     example_torch = {}
     float_names = ["voxels", "bev_map"]
     for k, v in example.items():
-        if k in ["anchors", "anchors_mask", "reg_targets", "reg_weights", "labels"]:
+        if k in ["anchors", "anchors_mask", "reg_targets", "reg_targets_1", "reg_targets_2", "reg_weights", "labels"]:
             example_torch[k] = [res.to(device, non_blocking=non_blocking) for res in v]
         elif k in [
-            "voxels",
+            # 加入前两帧的处理
+            "voxels","voxels_1","voxels_2",
             "bev_map",
-            "coordinates",
-            "num_points",
+            "coordinates","coordinates_1","coordinates_2",
+            "num_points","num_points_1","num_points_2",
             "points",
-            "num_voxels",
+            "num_voxels","num_voxels_1","num_voxels_2",
         ]:
             example_torch[k] = v.to(device, non_blocking=non_blocking)
         elif k == "calib":

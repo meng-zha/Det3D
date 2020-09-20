@@ -236,21 +236,31 @@ def _box_single_to_corner_jit(boxes):
 
 
 @numba.njit
-def noise_per_box(boxes, valid_mask, loc_noises, rot_noises):
+def noise_per_box(boxes,boxes_1,boxes_2,boxes_3, valid_mask, loc_noises, rot_noises):
     # boxes: [N, 5]
     # valid_mask: [N]
     # loc_noises: [N, M, 3]
     # rot_noises: [N, M]
     num_boxes = boxes.shape[0]
     num_tests = loc_noises.shape[1]
+
     box_corners = box_np_ops.box2d_to_corner_jit(boxes)
+    box_corners_1 = box_np_ops.box2d_to_corner_jit(boxes_1)
+    box_corners_2 = box_np_ops.box2d_to_corner_jit(boxes_2)
+    box_corners_3 = box_np_ops.box2d_to_corner_jit(boxes_3)
+
     current_corners = np.zeros((4, 2), dtype=boxes.dtype)
+    current_corners_1 = np.zeros((4, 2), dtype=boxes.dtype)
+    current_corners_2 = np.zeros((4, 2), dtype=boxes.dtype)
+    current_corners_3 = np.zeros((4, 2), dtype=boxes.dtype)
+
     rot_mat_T = np.zeros((2, 2), dtype=boxes.dtype)
     success_mask = -np.ones((num_boxes,), dtype=np.int64)
     # print(valid_mask)
     for i in range(num_boxes):
         if valid_mask[i]:
             for j in range(num_tests):
+                # T
                 current_corners[:] = box_corners[i]
                 current_corners -= boxes[i, :2]
                 _rotation_box2d_jit_(current_corners, rot_noises[i, j], rot_mat_T)
@@ -259,10 +269,52 @@ def noise_per_box(boxes, valid_mask, loc_noises, rot_noises):
                     current_corners.reshape(1, 4, 2), box_corners
                 )
                 coll_mat[0, i] = False
+
+                # T-1
+                center = boxes_1[i,:2] - boxes[i,:2]
+                _rotation_box2d_jit_(center.reshape((1,2)), rot_noises[i,j], rot_mat_T)
+                current_corners_1[:] = box_corners_1[i]
+                current_corners_1 -= boxes_1[i,:2]
+                _rotation_box2d_jit_(current_corners_1, rot_noises[i, j], rot_mat_T)
+                current_corners_1 += boxes[i, :2] + loc_noises[i,j,:2] + center[:2]
+                coll_mat_1 = box_collision_test(
+                    current_corners_1.reshape(1, 4, 2), box_corners_1
+                )
+                coll_mat_1[0, i] = False
+
+                # T+1
+                center = boxes_2[i,:2] - boxes[i,:2]
+                _rotation_box2d_jit_(center.reshape((1,2)), rot_noises[i,j], rot_mat_T)
+                current_corners_2[:] = box_corners_2[i]
+                current_corners_2 -= boxes_2[i,:2]
+                _rotation_box2d_jit_(current_corners_2, rot_noises[i, j], rot_mat_T)
+                current_corners_2 += boxes[i, :2] + loc_noises[i,j,:2]+center[:2]
+                coll_mat_2 = box_collision_test(
+                    current_corners_2.reshape(1, 4, 2), box_corners_2
+                )
+                coll_mat_2[0, i] = False
+
+                # T-2
+                center = boxes_3[i,:2] - boxes[i,:2]
+                _rotation_box2d_jit_(center.reshape((1,2)), rot_noises[i,j], rot_mat_T)
+                current_corners_3[:] = box_corners_3[i]
+                current_corners_3 -= boxes_3[i,:2]
+                _rotation_box2d_jit_(current_corners_3, rot_noises[i, j], rot_mat_T)
+                current_corners_3 += boxes[i, :2] + loc_noises[i,j,:2]+center[:2]
+                coll_mat_3 = box_collision_test(
+                    current_corners_3.reshape(1, 4, 2), box_corners_3
+                )
+                coll_mat_3[0, i] = False
+
+                coll_mat = coll_mat*coll_mat_1*coll_mat_2*coll_mat_3
+
                 # print(coll_mat)
                 if not coll_mat.any():
                     success_mask[i] = j
                     box_corners[i] = current_corners
+                    box_corners_1[i] = current_corners_1
+                    box_corners_2[i] = current_corners_2
+                    box_corners_3[i] = current_corners_3
                     break
     return success_mask
 
@@ -586,7 +638,12 @@ def get_group_center(locs, group_ids):
 
 def noise_per_object_v3_(
     gt_boxes,
+    gt_boxes_1,
+    gt_boxes_2,
+    gt_boxes_3,
     points=None,
+    points_1=None,
+    points_2=None,
     valid_mask=None,
     rotation_perturb=np.pi / 4,
     center_noise_std=1.0,
@@ -658,8 +715,21 @@ def noise_per_object_v3_(
         group_nums = np.array(list(group_id_num_dict.values()), dtype=np.int64)
 
     origin = [0.5, 0.5, 0.5]
+    # TODO: 3个gt_box
     gt_box_corners = box_np_ops.center_to_corner_box3d(
         gt_boxes[:, :3], gt_boxes[:, 3:6], gt_boxes[:, 6], origin=origin, axis=2
+    )
+    # T-1
+    gt_box_corners_1 = box_np_ops.center_to_corner_box3d(
+        gt_boxes_1[:, :3], gt_boxes_1[:, 3:6], gt_boxes_1[:, 6], origin=origin, axis=2
+    )
+    # T+1
+    gt_box_corners_2 = box_np_ops.center_to_corner_box3d(
+        gt_boxes_2[:, :3], gt_boxes_2[:, 3:6], gt_boxes_2[:, 6], origin=origin, axis=2
+    )
+    # T-2
+    gt_box_corners_3 = box_np_ops.center_to_corner_box3d(
+        gt_boxes_3[:, :3], gt_boxes_3[:, 3:6], gt_boxes_3[:, 6], origin=origin, axis=2
     )
     if group_ids is not None:
         if not enable_grot:
@@ -682,7 +752,11 @@ def noise_per_object_v3_(
     else:
         if not enable_grot:
             selected_noise = noise_per_box(
-                gt_boxes[:, [0, 1, 3, 4, 6]], valid_mask, loc_noises, rot_noises
+                gt_boxes[:, [0, 1, 3, 4, 6]],
+                gt_boxes_1[:, [0, 1, 3, 4, 6]],
+                gt_boxes_2[:, [0, 1, 3, 4, 6]],
+                gt_boxes_3[:, [0, 1, 3, 4, 6]],
+                valid_mask, loc_noises, rot_noises
             )
         else:
             selected_noise = noise_per_box_v2_(
@@ -705,8 +779,43 @@ def noise_per_object_v3_(
             rot_transforms,
             valid_mask,
         )
+    
+    # T-1 帧的增广
+    loc_transforms_1 = get_loc_transform(loc_transforms,rot_transforms, gt_boxes,gt_boxes_1)
+    surfaces = box_np_ops.corner_to_surfaces_3d_jit(gt_box_corners_1)
+    if points_1 is not None:
+        point_masks = points_in_convex_polygon_3d_jit(points_1[:, :3], surfaces)
+        points_transform_(
+            points_1,
+            gt_boxes_1[:, :3],
+            point_masks,
+            loc_transforms_1,
+            rot_transforms,
+            valid_mask,
+        )
 
+    box3d_transform_(gt_boxes_1, loc_transforms_1, rot_transforms, valid_mask)
+
+    # T+1帧的增广
+    loc_transforms_2 = get_loc_transform(loc_transforms,rot_transforms, gt_boxes,gt_boxes_2)
+    box3d_transform_(gt_boxes_2, loc_transforms_2, rot_transforms, valid_mask)
+
+    # T-2帧的增广
+    loc_transforms_3 = get_loc_transform(loc_transforms,rot_transforms, gt_boxes,gt_boxes_3)
+    if points_2 is not None:
+        point_masks = points_in_convex_polygon_3d_jit(points_2[:, :3], surfaces)
+        points_transform_(
+            points_2,
+            gt_boxes_3[:, :3],
+            point_masks,
+            loc_transforms_3,
+            rot_transforms,
+            valid_mask,
+        )
+
+    # T帧的box需要做为基准，所以最后变换
     box3d_transform_(gt_boxes, loc_transforms, rot_transforms, valid_mask)
+
 
 
 def noise_per_object_v2_(
@@ -793,15 +902,27 @@ def global_scaling(gt_boxes, points, scale=0.05):
     return gt_boxes, points
 
 
-def global_rotation(gt_boxes, points, rotation=np.pi / 4):
+def global_rotation(gt_boxes,gt_boxes_1,gt_boxes_2, points, points_1, points_2, rotation=np.pi / 4):
     if not isinstance(rotation, list):
         rotation = [-rotation, rotation]
     noise_rotation = np.random.uniform(rotation[0], rotation[1])
     points[:, :3] = box_np_ops.rotation_points_single_angle(
         points[:, :3], noise_rotation, axis=2
     )
+    points_1[:, :3] = box_np_ops.rotation_points_single_angle(
+        points_1[:, :3], noise_rotation, axis=2
+    )
+    points_2[:, :3] = box_np_ops.rotation_points_single_angle(
+        points_2[:, :3], noise_rotation, axis=2
+    )
     gt_boxes[:, :3] = box_np_ops.rotation_points_single_angle(
         gt_boxes[:, :3], noise_rotation, axis=2
+    )
+    gt_boxes_1[:, :3] = box_np_ops.rotation_points_single_angle(
+        gt_boxes_1[:, :3], noise_rotation, axis=2
+    )
+    gt_boxes_2[:, :3] = box_np_ops.rotation_points_single_angle(
+        gt_boxes_2[:, :3], noise_rotation, axis=2
     )
     if gt_boxes.shape[1] > 7:
         gt_boxes[:, 6:8] = box_np_ops.rotation_points_single_angle(
@@ -810,27 +931,39 @@ def global_rotation(gt_boxes, points, rotation=np.pi / 4):
             axis=2,
         )[:, :2]
     gt_boxes[:, -1] += noise_rotation
-    return gt_boxes, points
+    gt_boxes_1[:, -1] += noise_rotation
+    gt_boxes_2[:, -1] += noise_rotation
+    return gt_boxes,gt_boxes_1,gt_boxes_2, points, points_1, points_2
 
 
-def random_flip(gt_boxes, points, probability=0.5):
+def random_flip(gt_boxes,gt_boxes_1,gt_boxes_2, points, points_1, points_2,probability=0.5):
     enable = np.random.choice(
         [False, True], replace=False, p=[1 - probability, probability]
     )
     if enable:
         gt_boxes[:, 1] = -gt_boxes[:, 1]
         gt_boxes[:, -1] = -gt_boxes[:, -1] + np.pi
+        gt_boxes_1[:, 1] = -gt_boxes_1[:, 1]
+        gt_boxes_1[:, -1] = -gt_boxes_1[:, -1] + np.pi
+        gt_boxes_2[:, 1] = -gt_boxes_2[:, 1]
+        gt_boxes_2[:, -1] = -gt_boxes_2[:, -1] + np.pi
         points[:, 1] = -points[:, 1]
+        points_1[:, 1] = -points_1[:, 1]
+        points_2[:, 2] = -points_2[:, 1]
         if gt_boxes.shape[1] > 7:  # y axis: x, y, z, w, h, l, vx, vy, r
             gt_boxes[:, 7] = -gt_boxes[:, 7]
-    return gt_boxes, points
+    return gt_boxes,gt_boxes_1,gt_boxes_2, points, points_1, points_2
 
 
-def global_scaling_v2(gt_boxes, points, min_scale=0.95, max_scale=1.05):
+def global_scaling_v2(gt_boxes,gt_boxes_1,gt_boxes_2, points,points_1, points_2, min_scale=0.95, max_scale=1.05):
     noise_scale = np.random.uniform(min_scale, max_scale)
     points[:, :3] *= noise_scale
+    points_1[:, :3] *= noise_scale
+    points_2[:, :3] *= noise_scale
     gt_boxes[:, :-1] *= noise_scale
-    return gt_boxes, points
+    gt_boxes_1[:, :-1] *= noise_scale
+    gt_boxes_2[:, :-1] *= noise_scale
+    return gt_boxes,gt_boxes_1,gt_boxes_2, points, points_1, points_2
 
 
 def global_rotation_v2(gt_boxes, points, min_rad=-np.pi / 4, max_rad=np.pi / 4):
@@ -955,6 +1088,15 @@ def global_translate_(gt_boxes, points, noise_translate_std):
 
     return gt_boxes, points
 
+def get_loc_transform(loc_transforms_origin, rot_transforms, boxes,boxes_1):
+    loc_transforms = copy.deepcopy(loc_transforms_origin)
+    rot_mat_T = np.zeros((2, 2), dtype=boxes.dtype)
+    center = boxes_1[:,:2]-boxes[:,:2]
+    for i in range(center.shape[0]):
+        _rotation_box2d_jit_(center[i],rot_transforms[i],rot_mat_T)
+        loc_transforms[i,:2] += center[i]
+    loc_transforms[:,:2] -= (boxes_1[:,:2]-boxes[:,:2])
+    return loc_transforms
 
 if __name__ == "__main__":
     bboxes = np.array(

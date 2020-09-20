@@ -47,13 +47,15 @@ class Reformat(object):
             ground_plane = res["lidar"].get("ground_plane", None)
             labels = res["lidar"]["targets"]["labels"]
             reg_targets = res["lidar"]["targets"]["reg_targets"]
+            reg_targets_1 = res["lidar"]["targets"]["reg_targets_1"]
+            reg_targets_2 = res["lidar"]["targets"]["reg_targets_2"]
             reg_weights = res["lidar"]["targets"]["reg_weights"]
 
             if ground_plane:
                 data_bundle["ground_plane"] = ground_plane
 
             data_bundle.update(
-                dict(labels=labels, reg_targets=reg_targets, reg_weights=reg_weights,)
+                dict(labels=labels, reg_targets=reg_targets,reg_targets_1=reg_targets_1,reg_targets_2=reg_targets_2, reg_weights=reg_weights,)
             )
 
         return data_bundle, info

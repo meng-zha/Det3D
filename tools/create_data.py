@@ -2,8 +2,10 @@ import copy
 from pathlib import Path
 import pickle
 
+
 import fire
 
+import open3d # open3d should be imported before pytorch
 from det3d.datasets.kitti import kitti_common as kitti_ds
 from det3d.datasets.nuscenes import nusc_common as nu_ds
 from det3d.datasets.lyft import lyft_common as lyft_ds
@@ -38,7 +40,7 @@ def lyft_data_prep(root_path, version="trainval"):
 
 def lvx_data_prep(root_path):
     lvx_ds.create_lvx_info_file(root_path)
-    lvx_ds.create_reduced_point_cloud(root_path)
+    # lvx_ds.create_reduced_point_cloud(root_path)
     create_groundtruth_database(
         "LVX", root_path, Path(root_path) / "lvx_infos_train.pkl"
     )

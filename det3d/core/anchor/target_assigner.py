@@ -1,7 +1,7 @@
 from collections import OrderedDict
 
 import numpy as np
-from det3d.core.anchor.target_ops import create_target_np
+from det3d.core.anchor.target_ops import create_target_np,create_target_np_track
 from det3d.core.bbox import box_np_ops, region_similarity
 
 
@@ -122,6 +122,111 @@ class TargetAssigner:
             axis=-2,
         )
         targets_dict["bbox_targets"] = targets_dict["bbox_targets"].reshape(
+            -1, self.box_coder.code_size
+        )
+        targets_dict["labels"] = np.concatenate(
+            [v.reshape(*feature_map_size, -1) for v in targets_dict["labels"]], axis=-1
+        )
+        targets_dict["bbox_outside_weights"] = np.concatenate(
+            [
+                v.reshape(*feature_map_size, -1)
+                for v in targets_dict["bbox_outside_weights"]
+            ],
+            axis=-1,
+        )
+        targets_dict["labels"] = targets_dict["labels"].reshape(-1)
+        targets_dict["bbox_outside_weights"] = targets_dict[
+            "bbox_outside_weights"
+        ].reshape(-1)
+
+        return targets_dict
+
+    def assign_v3(
+        self, anchors_dict, gt_boxes,gt_boxes_1,gt_boxes_2,anchors_mask=None, gt_classes=None, gt_names=None
+    ):
+        '''
+        专门用于track的target assign，多了之前一帧的box回归目标和之后一帧的box回归目标
+        '''
+        def similarity_fn(anchors, gt_boxes):
+            anchors_rbv = anchors[:, [0, 1, 3, 4, -1]]
+            gt_boxes_rbv = gt_boxes[:, [0, 1, 3, 4, -1]]
+            return self._region_similarity_calculator.compare(anchors_rbv, gt_boxes_rbv)
+
+        def box_encoding_fn(boxes, anchors):
+            return self._box_coder.encode(boxes, anchors)
+
+        targets_list = []
+        anchor_loc_idx = 0
+        for class_name, anchor_dict in anchors_dict.items():
+            mask = np.array([c == class_name for c in gt_names], dtype=np.bool_)
+            # feature_map的size
+            feature_map_size = anchor_dict["anchors"].shape[:3]
+            # 每个位置anchors的数量
+            num_loc = anchor_dict["anchors"].shape[-2]
+
+            if anchors_mask is not None:
+                anchors_mask = anchors_mask.reshape(*feature_map_size, -1)
+                anchors_mask_class = anchors_mask[
+                    ..., anchor_loc_idx : anchor_loc_idx + num_loc
+                ].reshape(-1)
+                prune_anchor_fn = lambda _: np.where(anchors_mask_class)[0]
+            else:
+                prune_anchor_fn = None
+
+            targets = create_target_np_track(
+                anchor_dict["anchors"].reshape(-1, self.box_coder.code_size),
+                gt_boxes[mask],
+                gt_boxes_1[mask],
+                gt_boxes_2[mask],
+                similarity_fn,
+                box_encoding_fn,
+                prune_anchor_fn=prune_anchor_fn,
+                gt_classes=gt_classes[mask],
+                matched_threshold=anchor_dict["matched_thresholds"],
+                unmatched_threshold=anchor_dict["unmatched_thresholds"],
+                positive_fraction=self._positive_fraction,
+                rpn_batch_size=self._sample_size,
+                norm_by_num_examples=False,
+                box_code_size=self.box_coder.code_size,
+            )
+            anchor_loc_idx += num_loc
+            targets_list.append(targets)
+
+        targets_dict = {
+            "labels": [t["labels"] for t in targets_list],
+            "bbox_targets": [t["bbox_targets"] for t in targets_list],
+            "bbox_targets_1": [t["bbox_targets_1"] for t in targets_list],
+            "bbox_targets_2": [t["bbox_targets_2"] for t in targets_list],
+            "bbox_outside_weights": [t["bbox_outside_weights"] for t in targets_list],
+        }
+        targets_dict["bbox_targets"] = np.concatenate(
+            [
+                v.reshape(*feature_map_size, -1, self.box_coder.code_size)
+                for v in targets_dict["bbox_targets"]
+            ],
+            axis=-2,
+        )
+        targets_dict["bbox_targets_1"] = np.concatenate(
+            [
+                v.reshape(*feature_map_size, -1, self.box_coder.code_size)
+                for v in targets_dict["bbox_targets_1"]
+            ],
+            axis=-2,
+        )
+        targets_dict["bbox_targets_2"] = np.concatenate(
+            [
+                v.reshape(*feature_map_size, -1, self.box_coder.code_size)
+                for v in targets_dict["bbox_targets_2"]
+            ],
+            axis=-2,
+        )
+        targets_dict["bbox_targets"] = targets_dict["bbox_targets"].reshape(
+            -1, self.box_coder.code_size
+        )
+        targets_dict["bbox_targets_1"] = targets_dict["bbox_targets_1"].reshape(
+            -1, self.box_coder.code_size
+        )
+        targets_dict["bbox_targets_2"] = targets_dict["bbox_targets_2"].reshape(
             -1, self.box_coder.code_size
         )
         targets_dict["labels"] = np.concatenate(

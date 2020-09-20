@@ -45,7 +45,7 @@ class Preprocess(object):
             self.global_scaling_noise = cfg.global_scale_noise
             self.global_random_rot_range = cfg.global_rot_per_obj_range
             self.global_translate_noise_std = cfg.global_trans_noise
-            self.gt_points_drop = (cfg.gt_drop_percentage,)
+            self.gt_points_drop = (cfg.gt_drop_percentage, )
             self.remove_points_after_sample = cfg.remove_points_after_sample
             self.class_names = cfg.class_names
             self.db_sampler = build_dbsampler(cfg.db_sampler)
@@ -54,12 +54,16 @@ class Preprocess(object):
 
         self.symmetry_intensity = cfg.get("symmetry_intensity", False)
 
-    def __call__(self, res, info):
+    def __call__(self, res, info, res_1, info_1, res_2, info_2):
 
         res["mode"] = self.mode
+        res_1["mode"] = self.mode
+        res_2["mode"] = self.mode
 
-        if res["type"] in ["KittiDataset", "LyftDataset","LvxDataset"]:
+        if res["type"] in ["KittiDataset", "LyftDataset", "LvxDataset"]:
             points = res["lidar"]["points"]
+            points_1 = res_1["lidar"]["points"]
+            points_2 = res_2["lidar"]["points"]
         elif res["type"] == "NuScenesDataset":
             points = res["lidar"]["combined"]
 
@@ -68,11 +72,16 @@ class Preprocess(object):
 
             gt_dict = {
                 "gt_boxes": anno_dict["boxes"],
+            # 加入之前之后一帧的boxes
+                "gt_boxes_1": anno_dict["boxes_1"],
+                "gt_boxes_2": anno_dict["boxes_2"],
+                "gt_boxes_3": anno_dict["boxes_3"],
                 "gt_names": np.array(anno_dict["names"]).reshape(-1),
             }
 
             if "difficulty" not in anno_dict:
-                difficulty = np.zeros([anno_dict["boxes"].shape[0]], dtype=np.int32)
+                difficulty = np.zeros([anno_dict["boxes"].shape[0]],
+                                      dtype=np.int32)
                 gt_dict["difficulty"] = difficulty
             else:
                 gt_dict["difficulty"] = anno_dict["difficulty"]
@@ -85,15 +94,12 @@ class Preprocess(object):
         if self.add_rgb_to_points:
             assert calib is not None and "image" in res
             image_path = res["image"]["image_path"]
-            image = (
-                imgio.imread(str(pathlib.Path(root_path) / image_path)).astype(
-                    np.float32
-                )
-                / 255
-            )
-            points_rgb = box_np_ops.add_rgb_to_points(
-                points, image, calib["rect"], calib["Trv2c"], calib["P2"]
-            )
+            image = (imgio.imread(str(pathlib.Path(root_path) /
+                                      image_path)).astype(np.float32) / 255)
+            points_rgb = box_np_ops.add_rgb_to_points(points, image,
+                                                      calib["rect"],
+                                                      calib["Trv2c"],
+                                                      calib["P2"])
             points = np.concatenate([points, points_rgb], axis=1)
             num_point_features += 3
 
@@ -111,19 +117,19 @@ class Preprocess(object):
         if self.remove_outside_points:
             assert calib is not None
             image_shape = res["image"]["image_shape"]
-            points = box_np_ops.remove_outside_points(
-                points, calib["rect"], calib["Trv2c"], calib["P2"], image_shape
-            )
+            points = box_np_ops.remove_outside_points(points, calib["rect"],
+                                                      calib["Trv2c"],
+                                                      calib["P2"], image_shape)
         if self.remove_environment is True and self.mode == "train":
-            selected = kitti.keep_arrays_by_name(gt_names, target_assigner.classes)
+            selected = kitti.keep_arrays_by_name(gt_names,
+                                                 target_assigner.classes)
             _dict_select(gt_dict, selected)
             masks = box_np_ops.points_in_rbbox(points, gt_dict["gt_boxes"])
             points = points[masks.any(-1)]
 
         if self.mode == "train":
-            selected = kitti.drop_arrays_by_name(
-                gt_dict["gt_names"], ["DontCare", "ignore"]
-            )
+            selected = kitti.drop_arrays_by_name(gt_dict["gt_names"],
+                                                 ["DontCare", "ignore"])
 
             _dict_select(gt_dict, selected)
             if self.remove_unknown:
@@ -137,19 +143,22 @@ class Preprocess(object):
                 _dict_select(gt_dict, keep_mask)
             gt_dict.pop("difficulty")
 
+            # 保证每个box内点的数量
             if self.min_points_in_gt > 0:
                 # points_count_rbbox takes 10ms with 10 sweeps nuscenes data
                 point_counts = box_np_ops.points_count_rbbox(
-                    points, gt_dict["gt_boxes"]
-                )
+                    points, gt_dict["gt_boxes"])
                 mask = point_counts >= min_points_in_gt
                 _dict_select(gt_dict, mask)
 
             gt_boxes_mask = np.array(
-                [n in self.class_names for n in gt_dict["gt_names"]], dtype=np.bool_
-            )
+                [n in self.class_names for n in gt_dict["gt_names"]],
+                dtype=np.bool_)
 
+            # 数据增广暂时去掉，有点改不过来
             if self.db_sampler:
+                pass
+                assert NotImplementedError
                 sampled_dict = self.db_sampler.sample_all(
                     res["metadata"]["image_prefix"],
                     gt_dict["gt_boxes"],
@@ -166,23 +175,28 @@ class Preprocess(object):
                     sampled_points = sampled_dict["points"]
                     sampled_gt_masks = sampled_dict["gt_masks"]
                     gt_dict["gt_names"] = np.concatenate(
-                        [gt_dict["gt_names"], sampled_gt_names], axis=0
-                    )
+                        [gt_dict["gt_names"], sampled_gt_names], axis=0)
                     gt_dict["gt_boxes"] = np.concatenate(
-                        [gt_dict["gt_boxes"], sampled_gt_boxes]
-                    )
+                        [gt_dict["gt_boxes"], sampled_gt_boxes])
                     gt_boxes_mask = np.concatenate(
-                        [gt_boxes_mask, sampled_gt_masks], axis=0
-                    )
+                        [gt_boxes_mask, sampled_gt_masks], axis=0)
 
                     if self.remove_points_after_sample:
-                        masks = box_np_ops.points_in_rbbox(points, sampled_gt_boxes)
+                        masks = box_np_ops.points_in_rbbox(
+                            points, sampled_gt_boxes)
                         points = points[np.logical_not(masks.any(-1))]
 
                     points = np.concatenate([sampled_points, points], axis=0)
+            # 暂时不加扰动了
+            # TODO:需要改4帧，t-2，t-1,t的点云，以及t+1的box
             prep.noise_per_object_v3_(
                 gt_dict["gt_boxes"],
+                gt_dict["gt_boxes_1"],
+                gt_dict["gt_boxes_2"],
+                gt_dict["gt_boxes_3"],
                 points,
+                points_1,
+                points_2,
                 gt_boxes_mask,
                 rotation_perturb=self.gt_rotation_noise,
                 center_noise_std=self.gt_loc_noise_std,
@@ -193,62 +207,80 @@ class Preprocess(object):
 
             _dict_select(gt_dict, gt_boxes_mask)
 
+            # 将类别转换为index
             gt_classes = np.array(
                 [self.class_names.index(n) + 1 for n in gt_dict["gt_names"]],
                 dtype=np.int32,
             )
             gt_dict["gt_classes"] = gt_classes
 
-            gt_dict["gt_boxes"], points = prep.random_flip(gt_dict["gt_boxes"], points)
-            gt_dict["gt_boxes"], points = prep.global_rotation(
-                gt_dict["gt_boxes"], points, rotation=self.global_rotation_noise
-            )
-            gt_dict["gt_boxes"], points = prep.global_scaling_v2(
-                gt_dict["gt_boxes"], points, *self.global_scaling_noise
-            )
+            # 添加了三帧的全局变换
+            gt_dict["gt_boxes"], gt_dict["gt_boxes_1"], gt_dict[
+                "gt_boxes_2"], points, points_1, points_2 = prep.random_flip(
+                    gt_dict["gt_boxes"], gt_dict["gt_boxes_1"],
+                    gt_dict["gt_boxes_2"], points, points_1, points_2)
+            gt_dict["gt_boxes"], gt_dict["gt_boxes_1"], gt_dict[
+                "gt_boxes_2"], points, points_1, points_2 = prep.global_rotation(
+                    gt_dict["gt_boxes"], gt_dict["gt_boxes_1"],
+                    gt_dict["gt_boxes_2"],
+                    points,
+                    points_1,
+                    points_2,
+                    rotation=self.global_rotation_noise)
+            gt_dict["gt_boxes"], gt_dict["gt_boxes_1"], gt_dict[
+                "gt_boxes_2"], points, points_1, points_2 = prep.global_scaling_v2(
+                    gt_dict["gt_boxes"], gt_dict["gt_boxes_1"],
+                    gt_dict["gt_boxes_2"], points, points_1, points_2, *self.global_scaling_noise)
 
         if self.shuffle_points:
             # shuffle is a little slow.
             np.random.shuffle(points)
+            np.random.shuffle(points_1)
+            np.random.shuffle(points_2)
 
         if self.mode == "train" and self.random_select:
+            # 进行点的随机采样，暂时不需要
             if self.npoints < points.shape[0]:
                 pts_depth = points[:, 2]
                 pts_near_flag = pts_depth < 40.0
                 far_idxs_choice = np.where(pts_near_flag == 0)[0]
                 near_idxs = np.where(pts_near_flag == 1)[0]
-                near_idxs_choice = np.random.choice(
-                    near_idxs, self.npoints - len(far_idxs_choice), replace=False
-                )
+                near_idxs_choice = np.random.choice(near_idxs,
+                                                    self.npoints -
+                                                    len(far_idxs_choice),
+                                                    replace=False)
 
-                choice = (
-                    np.concatenate((near_idxs_choice, far_idxs_choice), axis=0)
-                    if len(far_idxs_choice) > 0
-                    else near_idxs_choice
-                )
+                choice = (np.concatenate(
+                    (near_idxs_choice, far_idxs_choice), axis=0)
+                          if len(far_idxs_choice) > 0 else near_idxs_choice)
                 np.random.shuffle(choice)
             else:
                 choice = np.arange(0, len(points), dtype=np.int32)
                 if self.npoints > len(points):
-                    extra_choice = np.random.choice(
-                        choice, self.npoints - len(points), replace=False
-                    )
+                    extra_choice = np.random.choice(choice,
+                                                    self.npoints - len(points),
+                                                    replace=False)
                     choice = np.concatenate((choice, extra_choice), axis=0)
                 np.random.shuffle(choice)
 
             points = points[choice]
 
         if self.symmetry_intensity:
-            points[:, -1] -= 0.5  # translate intensity to [-0.5, 0.5]
+            points[:, -1] -= 0.5    # translate intensity to [-0.5, 0.5]
             # points[:, -1] *= 2
 
         res["lidar"]["points"] = points
+        res_1["lidar"]["points"] = points_1
+        res_2["lidar"]["points"] = points_2
 
         if self.mode == "train":
+            import copy
 
             res["lidar"]["annotations"] = gt_dict
+            res_1["lidar"]["annotations"] = copy.deepcopy(gt_dict)
+            res_2["lidar"]["annotations"] = copy.deepcopy(gt_dict)
 
-        return res, info
+        return res, info, res_1,info_1,res_2,info_2
 
 
 @PIPELINES.register_module
@@ -277,15 +309,15 @@ class Voxelization(object):
         if res["mode"] == "train":
             gt_dict = res["lidar"]["annotations"]
             bv_range = pc_range[[0, 1, 3, 4]]
-            mask = prep.filter_gt_box_outside_range(gt_dict["gt_boxes"], bv_range)
+            mask = prep.filter_gt_box_outside_range(gt_dict["gt_boxes"],
+                                                    bv_range)
             _dict_select(gt_dict, mask)
 
             res["lidar"]["annotations"] = gt_dict
 
         # points = points[:int(points.shape[0] * 0.1), :]
         voxels, coordinates, num_points = self.voxel_generator.generate(
-            res["lidar"]["points"]
-        )
+            res["lidar"]["points"])
         num_voxels = np.array([voxels.shape[0]], dtype=np.int64)
 
         res["lidar"]["voxels"] = dict(
@@ -313,8 +345,7 @@ class AssignTarget(object):
             anchor_generator = build_anchor_generator(a_cfg)
             anchor_generators.append(anchor_generator)
         similarity_calc = build_similarity_metric(
-            target_assigner_config.region_similarity_calculator
-        )
+            target_assigner_config.region_similarity_calculator)
         positive_fraction = target_assigner_config.sample_positive_fraction
         if positive_fraction < 0:
             positive_fraction = None
@@ -326,7 +357,8 @@ class AssignTarget(object):
         for task in tasks:
             target_assigner = TargetAssigner(
                 box_coder=box_coder,
-                anchor_generators=anchor_generators[flag : flag + task.num_class],
+                anchor_generators=anchor_generators[flag:flag +
+                                                    task.num_class],
                 region_similarity_calculator=similarity_calc,
                 positive_fraction=positive_fraction,
                 sample_size=target_assigner_config.sample_size,
@@ -340,30 +372,41 @@ class AssignTarget(object):
 
     def __call__(self, res, info):
 
+        # 需要检测的物体类别
         class_names_by_task = [t.classes for t in self.target_assigners]
 
         # Calculate output featuremap size
         grid_size = res["lidar"]["voxels"]["shape"]
         feature_map_size = grid_size[:2] // self.out_size_factor
-        feature_map_size = [*feature_map_size, 1][::-1]
+        feature_map_size = [*feature_map_size, 1][::-1]    # z轴的size是1
 
+        # 生成不同类的不同anchor
+        # anchors list
         anchors_by_task = [
             t.generate_anchors(feature_map_size) for t in self.target_assigners
         ]
+        # anchors 类别有dict
         anchor_dicts_by_task = [
-            t.generate_anchors_dict(feature_map_size) for t in self.target_assigners
+            t.generate_anchors_dict(feature_map_size)
+            for t in self.target_assigners
         ]
+        # reshape乘n*7的形式
         reshaped_anchors_by_task = [
-            t["anchors"].reshape([-1, t["anchors"].shape[-1]]) for t in anchors_by_task
+            t["anchors"].reshape([-1, t["anchors"].shape[-1]])
+            for t in anchors_by_task
         ]
         matched_by_task = [t["matched_thresholds"] for t in anchors_by_task]
-        unmatched_by_task = [t["unmatched_thresholds"] for t in anchors_by_task]
+        unmatched_by_task = [
+            t["unmatched_thresholds"] for t in anchors_by_task
+        ]
 
+        # bev下的anchor
         bv_anchors_by_task = [
             box_np_ops.rbbox2d_to_near_bbox(anchors[:, [0, 1, 3, 4, -1]])
             for anchors in reshaped_anchors_by_task
         ]
 
+        # 整合为字典
         anchor_caches_by_task = dict(
             anchors=reshaped_anchors_by_task,
             anchors_bv=bv_anchors_by_task,
@@ -373,48 +416,68 @@ class AssignTarget(object):
         )
 
         if res["mode"] == "train":
+            # 得到当前帧的标注
             gt_dict = res["lidar"]["annotations"]
 
             task_masks = []
             flag = 0
+            # 不同任务的不同类gt，得到mask,task_id:[]
             for class_name in class_names_by_task:
-                task_masks.append(
-                    [
-                        np.where(
-                            gt_dict["gt_classes"] == class_name.index(i) + 1 + flag
-                        )
-                        for i in class_name
-                    ]
-                )
+                task_masks.append([
+                    np.where(gt_dict["gt_classes"] == class_name.index(i) + 1 +
+                             flag) for i in class_name
+                ])
                 flag += len(class_name)
 
+            # task存储
             task_boxes = []
+            task_boxes_1 = []
+            task_boxes_2 = []
             task_classes = []
             task_names = []
             flag2 = 0
             for idx, mask in enumerate(task_masks):
                 task_box = []
+                task_box_1 = []
+                task_box_2 = []
                 task_class = []
                 task_name = []
                 for m in mask:
+                    # mask 应用
+                    # TODO: 在这里应用mask时需要把前后两帧的label加入
                     task_box.append(gt_dict["gt_boxes"][m])
+                    task_box_1.append(gt_dict["gt_boxes_1"][m])
+                    task_box_2.append(gt_dict["gt_boxes_2"][m])
                     task_class.append(gt_dict["gt_classes"][m] - flag2)
                     task_name.append(gt_dict["gt_names"][m])
                 task_boxes.append(np.concatenate(task_box, axis=0))
+                task_boxes_1.append(np.concatenate(task_box_1, axis=0))
+                task_boxes_2.append(np.concatenate(task_box_2, axis=0))
                 task_classes.append(np.concatenate(task_class))
                 task_names.append(np.concatenate(task_name))
                 flag2 += len(mask)
 
-            for task_box in task_boxes:
+            for task_box, task_box_1, task_box_2 in zip(
+                    task_boxes, task_boxes_1, task_boxes_2):
+                # TODO:将朝向角限制在-pi~pi
                 # limit rad to [-pi, pi]
-                task_box[:, -1] = box_np_ops.limit_period(
-                    task_box[:, -1], offset=0.5, period=np.pi * 2
-                )
+                task_box[:, -1] = box_np_ops.limit_period(task_box[:, -1],
+                                                          offset=0.5,
+                                                          period=np.pi * 2)
+                task_box_1[:, -1] = box_np_ops.limit_period(task_box_1[:, -1],
+                                                            offset=0.5,
+                                                            period=np.pi * 2)
+                task_box_2[:, -1] = box_np_ops.limit_period(task_box_2[:, -1],
+                                                            offset=0.5,
+                                                            period=np.pi * 2)
 
             # print(gt_dict.keys())
+            # 对应的gt_boxes_1
             gt_dict["gt_classes"] = task_classes
             gt_dict["gt_names"] = task_names
             gt_dict["gt_boxes"] = task_boxes
+            gt_dict["gt_boxes_1"] = task_boxes_1
+            gt_dict["gt_boxes_2"] = task_boxes_2
 
             res["lidar"]["annotations"] = gt_dict
 
@@ -423,55 +486,66 @@ class AssignTarget(object):
         anchors_dicts = anchor_caches_by_task["anchors_dict"]
 
         example = {}
+        # anchor是reshape出来的D*H*W*7
         example["anchors"] = anchorss
 
         if self.anchor_area_threshold >= 0:
+            # 暂时没有用到
             example["anchors_mask"] = []
             for idx, anchors_bv in enumerate(anchors_bvs):
                 anchors_mask = None
                 # slow with high resolution. recommend disable this forever.
                 coors = coordinates
                 dense_voxel_map = box_np_ops.sparse_sum_for_anchors_mask(
-                    coors, tuple(grid_size[::-1][1:])
-                )
+                    coors, tuple(grid_size[::-1][1:]))
                 dense_voxel_map = dense_voxel_map.cumsum(0)
                 dense_voxel_map = dense_voxel_map.cumsum(1)
                 anchors_area = box_np_ops.fused_get_anchors_area(
-                    dense_voxel_map, anchors_bv, voxel_size, pc_range, grid_size
-                )
+                    dense_voxel_map, anchors_bv, voxel_size, pc_range,
+                    grid_size)
                 anchors_mask = anchors_area > anchor_area_threshold
                 example["anchors_mask"].append(anchors_mask)
 
         if res["mode"] == "train":
             targets_dicts = []
+            # 主体部分，利用anchors和gt_boxes得到target
+            # TODO: 修改的核心部分
             for idx, target_assigner in enumerate(self.target_assigners):
                 if "anchors_mask" in example:
                     anchors_mask = example["anchors_mask"][idx]
                 else:
                     anchors_mask = None
-                targets_dict = target_assigner.assign_v2(
+                targets_dict = target_assigner.assign_v3(
                     anchors_dicts[idx],
                     gt_dict["gt_boxes"][idx],
+                    gt_dict["gt_boxes_1"][idx],
+                    gt_dict["gt_boxes_2"][idx],
                     anchors_mask,
                     gt_classes=gt_dict["gt_classes"][idx],
                     gt_names=gt_dict["gt_names"][idx],
                 )
                 targets_dicts.append(targets_dict)
 
-            example.update(
-                {
-                    "labels": [
-                        targets_dict["labels"] for targets_dict in targets_dicts
-                    ],
-                    "reg_targets": [
-                        targets_dict["bbox_targets"] for targets_dict in targets_dicts
-                    ],
-                    "reg_weights": [
-                        targets_dict["bbox_outside_weights"]
-                        for targets_dict in targets_dicts
-                    ],
-                }
-            )
+            example.update({
+                "labels":
+                [targets_dict["labels"] for targets_dict in targets_dicts],
+                "reg_targets": [
+                    targets_dict["bbox_targets"]
+                    for targets_dict in targets_dicts
+                ],
+                "reg_targets_1": [
+                    targets_dict["bbox_targets_1"]
+                    for targets_dict in targets_dicts
+                ],
+                "reg_targets_2": [
+                    targets_dict["bbox_targets_2"]
+                    for targets_dict in targets_dicts
+                ],
+                "reg_weights": [
+                    targets_dict["bbox_outside_weights"]
+                    for targets_dict in targets_dicts
+                ],
+            })
 
         res["lidar"]["targets"] = example
 

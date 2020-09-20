@@ -3,8 +3,9 @@ import json
 import os
 import sys
 
+import numpy as np # numpy should be imported before open3d after the glx of xfvb
+import open3d # open3d should be imported before pytorch
 import apex
-import numpy as np
 import torch
 import yaml
 from det3d import __version__, torchie
@@ -94,8 +95,8 @@ def main():
 
     model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
 
-    dataset = build_dataset(cfg.data.val)
-    # dataset = build_dataset(cfg.data.test)
+    # dataset = build_dataset(cfg.data.val)
+    dataset = build_dataset(cfg.data.test)
     data_loader = build_dataloader(
         dataset,
         batch_size=cfg.data.samples_per_gpu,
@@ -158,7 +159,7 @@ def main():
     for p in all_predictions:
         predictions.update(p)
 
-    result_dict, _ = dataset.evaluation(predictions, output_dir=args.work_dir,vis=True)
+    result_dict, _ = dataset.evaluation(predictions, output_dir=args.work_dir,vis=True,track=True)
 
     for k, v in result_dict["results"].items():
         print(f"Evaluation {k}: {v}")

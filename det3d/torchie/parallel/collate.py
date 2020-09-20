@@ -97,7 +97,9 @@ def collate_kitti(batch_list, samples_per_gpu=1):
     # voxel_nums_list = example_merged["num_voxels"]
     # example_merged.pop("num_voxels")
     for key, elems in example_merged.items():
-        if key in ["voxels", "num_points", "num_gt", "voxel_labels", "num_voxels"]:
+        # 加入多帧的转换
+        if key in ["voxels", "num_points", "num_gt", "voxel_labels", "num_voxels",
+                    "voxels_1", "num_points_1", "num_voxels_1","voxels_2", "num_points_2", "num_voxels_2"]:
             ret[key] = torch.tensor(np.concatenate(elems, axis=0))
         elif key in [
             "gt_boxes",
@@ -127,7 +129,7 @@ def collate_kitti(batch_list, samples_per_gpu=1):
                         ret[key][k1].append(v1)
             for k1, v1 in ret[key].items():
                 ret[key][k1] = torch.tensor(np.stack(v1, axis=0))
-        elif key in ["coordinates", "points"]:
+        elif key in ["coordinates", "points","coordinates_1","coordinates_2"]:
             coors = []
             for i, coor in enumerate(elems):
                 coor_pad = np.pad(
@@ -135,7 +137,7 @@ def collate_kitti(batch_list, samples_per_gpu=1):
                 )
                 coors.append(coor_pad)
             ret[key] = torch.tensor(np.concatenate(coors, axis=0))
-        elif key in ["anchors", "anchors_mask", "reg_targets", "reg_weights", "labels"]:
+        elif key in ["anchors", "anchors_mask", "reg_targets", "reg_targets_1", "reg_targets_2", "reg_weights", "labels"]:
             ret[key] = defaultdict(list)
             res = []
             for elem in elems:
