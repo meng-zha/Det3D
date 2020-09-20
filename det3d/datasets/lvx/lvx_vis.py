@@ -279,26 +279,46 @@ def show_lidar_with_boxes(pc_velo, objects, calib):
         p3d.add_line([x1, y1, z1], [x2, y2, z2])
     p3d.show()
 
-def show_trajectory(gt_objects,dt_objects,gt_plt,dt_plt,overlap,idx):
-    obj = gt_objects[idx]
-    box3d_pts_3d = compute_box_3d_track(obj.l,obj.w,obj.h,obj.rz,*obj.t)
-    for k in range(4):
-        i, j = k, (k + 1) % 4
-        gt_plt.plot([box3d_pts_3d[i,0],box3d_pts_3d[j,0]],[box3d_pts_3d[i,1],box3d_pts_3d[j,1]],color='r',linewidth=0.3)
+def draw_track_3d(dt_objects,fig,idx):
+    for obj in dt_objects:
+        if obj.track == idx:
+            dt_corners = center_to_corner_box3d(np.array(obj.t)[np.newaxis,:],np.array([obj.l,obj.w,obj.h])[np.newaxis,:], np.array([obj.rz]))
+            print(dt_corners)
+            fig = draw_gt_boxes3d(dt_corners,None,draw_text=False,color=(0,0,1),fig=fig, view_setting=(235,70,60))
+    return fig
 
-    track_id = -1
-    if np.array(overlap[idx]).max() > 0.2:
-        track_id = np.array(overlap[gt_objects.index(obj)]).argmax()
-    
-    if track_id != -1:
-        obj = dt_objects[track_id]
+def show_trajectory(gt_objects,dt_objects,gt_plt,dt_plt,overlap,idx):
+    if gt_plt is not None:
+        obj = gt_objects[idx]
         box3d_pts_3d = compute_box_3d_track(obj.l,obj.w,obj.h,obj.rz,*obj.t)
-        track = obj.track
-        np.random.seed(int(abs(track)))
-        c = np.random.rand(3)
         for k in range(4):
             i, j = k, (k + 1) % 4
-            dt_plt.plot([box3d_pts_3d[i,0],box3d_pts_3d[j,0]],[box3d_pts_3d[i,1],box3d_pts_3d[j,1]],color=c,linewidth=0.3)
+            gt_plt.plot([box3d_pts_3d[i,0],box3d_pts_3d[j,0]],[box3d_pts_3d[i,1],box3d_pts_3d[j,1]],color='r',linewidth=0.3)
+
+        track_id = -1
+        if np.array(overlap[idx]).max() > 0.2:
+            track_id = np.array(overlap[gt_objects.index(obj)]).argmax()
+        
+        if track_id != -1:
+            obj = dt_objects[track_id]
+            box3d_pts_3d = compute_box_3d_track(obj.l,obj.w,obj.h,obj.rz,*obj.t)
+            track = obj.track
+            np.random.seed(int(abs(track)))
+            c = np.random.rand(3)
+            for k in range(4):
+                i, j = k, (k + 1) % 4
+                dt_plt.plot([box3d_pts_3d[i,0],box3d_pts_3d[j,0]],[box3d_pts_3d[i,1],box3d_pts_3d[j,1]],color=c,linewidth=0.3)
+    else:
+        for obj in dt_objects:
+            if obj.track == idx:
+                box3d_pts_3d = compute_box_3d_track(obj.l,obj.w,obj.h,obj.rz,*obj.t)
+                track = obj.track
+                np.random.seed(int(abs(track)))
+                c = np.random.rand(3)
+                for k in range(4):
+                    i, j = k, (k + 1) % 4
+                    dt_plt.plot([box3d_pts_3d[i,0],box3d_pts_3d[j,0]],[box3d_pts_3d[i,1],box3d_pts_3d[j,1]],color=c,linewidth=0.3)
+
 
 
 
@@ -397,41 +417,97 @@ def inte_to_rgb(pc_inte):
     r = np.maximum((ratio - 1), 0)
     g = 1 - b - r
     return np.stack([r, g, b, np.ones_like(r)]).transpose()
+    
+def track_vis_all(dt_annos,output_dir):
+    fig = mlab.figure(figure=None, bgcolor=(0.85,0.85,0.85), fgcolor=None, engine=None, size=(3200, 2000))
+    # pcd = o3d.io.read_point_cloud("/Extra/zhangmeng/3d_detection/BBOX_x4_track/testing/Lidar/PC_300.pcd")
+    pcd = o3d.io.read_point_cloud("/home/zhangmeng/PC_2.pcd")
+    points = np.asarray(pcd.points)
+    plane = points[points[:,2]<0.1,:]
+    points = points[points[:,2]>0.1,:]
+    fig = draw_lidar(points,color=None,fig=fig)
+    fig = draw_lidar(plane,color=None,fig=fig)
+
+    print(dt_annos[0])
+    dt_corners = center_to_corner_box3d(dt_annos[0]['location'],dt_annos[0]['dimensions'], dt_annos[0]['rotation_y'])
+    color_list = np.zeros((dt_annos[0]['id'].shape[0],3))
+    pos = dt_annos[0]['location']
+    track = dt_annos[0]['id']
+    for j in range(dt_annos[0]['id'].shape[0]):
+        np.random.seed(int(dt_annos[0]['id'][j]))
+        color_list[j] = np.random.rand(3)
+
+    fig = draw_gt_boxes3d(dt_corners, dt_annos[0]['id'],draw_text=False,line_width=2,fig=fig,color_list=color_list,view_setting=(235,70,60))
+
+    for i in range(3,len(dt_annos),3):
+        for j in range(dt_annos[i]['id'].shape[0]):
+            ind = np.where(track == dt_annos[i]['id'][j])[0]
+            print(ind)
+            if ind.size:
+                mlab.plot3d([pos[ind[0]][0], dt_annos[i]['location'][j,0]],[pos[ind[0]][1], dt_annos[i]['location'][j,1]],[pos[ind[0]][2], dt_annos[i]['location'][j,2]], color=tuple(color_list[ind[0]]), line_width=7, tube_radius=None, figure=fig)
+                pos[ind[0]] = dt_annos[i]['location'][j]
+        
+    mlab.view(azimuth=230, elevation=45, focalpoint=[0,0,0], distance=65.0)
+    img_path = os.path.join(output_dir,f"track_all_3d.png")
+    mlab.savefig(img_path)
+    # img_path = os.path.join(output_dir,f"track_all_3d.eps")
+    # mlab.savefig(filename=img_path,figure=fig)
 
 # -----------------------------------------------------------------------------------------
 def track_vis(gt_annos,dt_annos,output_dir, track_id):
     root_path = dt_annos[0]["metadata"]["image_prefix"]
+    plt.style.use(['science','ieee','retro'])
     gt_plt = plt.figure()
     plt.xlim(-40,40)
     plt.ylim(-40,40)
     plt.rcParams['figure.dpi'] = 500
     plt.rcParams['savefig.dpi'] = 500
     gt_ax = gt_plt.add_subplot(1,1,1)
+    plt.style.use(['science','ieee','retro'])
     dt_plt = plt.figure()
     plt.xlim(-40,40)
     plt.ylim(-40,40)
+    if gt_annos is None:
+        plt.xlim(-20,20)
+        plt.ylim(-20,20)
     plt.rcParams['figure.dpi'] = 500
     plt.rcParams['savefig.dpi'] = 500
     dt_ax = dt_plt.add_subplot(1,1,1)
+
+    fig = mlab.figure(figure=None, bgcolor=(0,0,0), fgcolor=None, engine=None, size=(1600, 1000))
+    pcd = o3d.io.read_point_cloud("/Extra/zhangmeng/3d_detection/BBOX_x4_track/testing/Lidar/PC_0.pcd")
+    points = np.asarray(pcd.points)
+    fig = draw_lidar(points,color=None,fig=fig)
     
     if gt_annos is not None:
         overlap,_,_,_ = calculate_iou_partly(gt_annos,dt_annos,2,50,2,0.5)
         dataset = lvx_object(root_path)
         gt_image_idxes = [str(info["token"]) for info in gt_annos]
+        count = 0
         for idx in gt_image_idxes:
-            print(idx)
             gt_objects = dataset.get_label_objects(gt_annos[gt_image_idxes.index(idx)])
             dt_objects = dataset.get_label_objects(dt_annos[gt_image_idxes.index(idx)])
 
             show_trajectory(gt_objects,dt_objects,gt_ax,dt_ax,overlap[gt_image_idxes.index(idx)],track_id)
+            if count%5==0:
+                fig = draw_track_3d(dt_objects,fig,track_id)
+            count+=1
     
     else:
-        raise NotImplemented
+        dataset = lvx_object(root_path,'testing')
+        for count,dt_anno in enumerate(dt_annos):
+            idx = dt_anno['metadata']['token']
+            dt_objects = dataset.get_label_objects(dt_anno)
+            show_trajectory([],dt_objects,None,dt_ax,[],track_id)
 
     gt_img_path = os.path.join(output_dir,f"gt_tracject_{track_id}.png")
     gt_plt.savefig(gt_img_path)
-    dt_img_path = os.path.join(output_dir,f"dt_tracject_{track_id}.png")
+    dt_img_path = os.path.join(output_dir,f"dt_tracject_{track_id}.pdf")
     dt_plt.savefig(dt_img_path)
+
+    mlab.savefig(gt_img_path)
+    mlab.clf()
+
 
 # -----------------------------------------------------------------------------------------
 def lvx_vis(gt_annos,dt_annos,output_dir):
@@ -529,7 +605,7 @@ def lvx_vis(gt_annos,dt_annos,output_dir):
     
 def lvx_vis_3d(gt_annos,dt_annos,output_dir):
     root_path = dt_annos[0]["metadata"]["image_prefix"]
-    fig = mlab.figure(figure=None, bgcolor=(0,0,0), fgcolor=None, engine=None, size=(1600, 1000))
+    fig = mlab.figure(figure=None, bgcolor=(0.85,0.85,0.85), fgcolor=None, engine=None, size=(1600, 1000))
 
     if gt_annos is not None:
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')

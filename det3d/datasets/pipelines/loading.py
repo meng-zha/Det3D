@@ -180,8 +180,7 @@ class LoadPointCloudFromFile(object):
                 normals_v = np.asarray(pcd.normals)
                 # TODO: num_features
                 points = np.concatenate([points,normals_v],axis=1)[:,:6].astype(np.float32)
-            # 将地面的点去除，以减小显存消耗
-            # points = points[points[:,2]>0.1,:]
+            points = points[points[:,1]>-19.5,:]
 
             res["lidar"]["points"] = points
 

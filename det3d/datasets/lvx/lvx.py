@@ -10,7 +10,7 @@ from det3d.datasets.registry import DATASETS
 
 from .lvx_common import *
 from .eval import get_official_eval_result
-from .lvx_vis import lvx_vis, lvx_vis_3d, track_vis
+from .lvx_vis import lvx_vis, lvx_vis_3d, track_vis, track_vis_all
 from .lvx_track import lvx_track
 
 
@@ -88,6 +88,21 @@ class LvxDataset(PointCloudDataset):
 
         return gt_annos
 
+    def save_det(self,dt_annos,output_dir):
+        class_names = self._class_names
+        if not os.path.exists(os.path.join(output_dir,"BeiCao_Label")):
+            os.makedirs(os.path.join(output_dir,"BeiCao_Label"))
+
+        for dt_anno in dt_annos:
+            # [mask, w, l, h, x, y, z,yaw, id]
+            num = dt_anno["name"].shape[0]
+            total = np.zeros((num,9))
+            for i in range(num):
+                total[i]=np.array([1,*dt_anno["dimensions"][i][[1,0,2]],*dt_anno["location"][i],dt_anno["rotation_y"][i],dt_anno["track_id"][i]])
+            save_path = os.path.join(output_dir,"BeiCao_Label",f"PC_{dt_anno['metadata']['token']}.txt")
+            np.savetxt(save_path,total)
+            
+
     def convert_detection_to_lvx_annos(self, detection):
         class_names = self._class_names
         lvx_infos = []
@@ -97,8 +112,6 @@ class LvxDataset(PointCloudDataset):
         annos = []
         for det_idx in gt_image_idxes:
             det = detection[det_idx]
-            info = self._lvx_infos[gt_image_idxes.index(det_idx)]
-            # info = self._lvx_infos[det_idx]
             final_box_preds = det["box3d_lidar"].detach().cpu().numpy()
             final_box_preds_1 = det["box3d_lidar_1"].detach().cpu().numpy()
             final_box_preds_2 = det["box3d_lidar_2"].detach().cpu().numpy()
@@ -161,15 +174,21 @@ class LvxDataset(PointCloudDataset):
         dt_source = self.convert_detection_to_lvx_annos(detections)
         dt_annos = copy.deepcopy(dt_source)
 
+        if self.test_mode:
+            gt_annos=None
+
         if track:
             # 存入跟踪结果
             dt_annos = lvx_track(dt_annos)
 
+            self.save_det(dt_annos, output_dir)
+
         if vis:
-            # lvx_vis(gt_annos,dt_annos,output_dir)
-            lvx_vis_3d(gt_annos,dt_annos,output_dir)
-            # for track_id in range(22):
+            lvx_vis(gt_annos,dt_annos,output_dir)
+            # lvx_vis_3d(gt_annos,dt_annos,output_dir)
+            # for track_id in range(0,7):
             #     track_vis(gt_annos,dt_annos,output_dir,track_id)
+            # track_vis_all(gt_annos,output_dir)
 
         # firstly convert standard detection to lvx-format dt annos
         z_axis = 2  # KITTI camera format use y as regular "z" axis.
@@ -251,6 +270,7 @@ class LvxDataset(PointCloudDataset):
         for i,start in enumerate(self._video_times):
             if idx < start:
                 idx = self._start_idx[i-1][0]+2+idx-self._video_times[i-1]
+                break
 
         info = self._lvx_infos[idx]
         info_1 = self._lvx_infos[idx-1]

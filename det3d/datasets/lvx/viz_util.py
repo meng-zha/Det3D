@@ -1,8 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Author: meng-zha
-# @Date:   2019-12-27 11:46:14
-# @Last Modified by:   meng-zha
-# @Last Modified time: 2019-12-29 17:56:15
 ''' Visualization code for point clouds and 3D bounding boxes with mayavi.
 Modified by Charles R. Qi
 Date: September 2017
@@ -40,7 +35,7 @@ def draw_lidar_simple(pc, color=None):
     mlab.view(azimuth=180, elevation=70, focalpoint=[ 12.0909996 , -1.04700089, -2.03249991], distance=62.0, figure=fig)
     return fig
 
-def draw_lidar(pc, color=None, fig=None, bgcolor=(0,0,0), pts_scale=1, pts_mode='point', pts_color=None):
+def draw_lidar(pc, color=None, fig=None, bgcolor=(0,0,0), pts_scale=.1, pts_mode='point', pts_color=None):
     ''' Draw lidar points
     Args:
         pc: numpy array (n,3) of XYZ
@@ -53,10 +48,10 @@ def draw_lidar(pc, color=None, fig=None, bgcolor=(0,0,0), pts_scale=1, pts_mode=
     if color is None: color = np.ones(pc.shape[0]+1)
     color[-1] = 2
     pc = np.concatenate([pc,[[0,0,0]]],axis = 0)
-    mlab.points3d(pc[:,0], pc[:,1], pc[:,2],color/3, color=(1,1,0), mode=pts_mode, colormap = 'Reds', scale_factor=pts_scale, figure=fig)
+    mlab.points3d(pc[:,0], pc[:,1], pc[:,2],color=(0.2,0.2,0.2),scale_mode="none", scale_factor=pts_scale, figure=fig)
     
     #draw origin
-    # mlab.points3d(0, 0, 0, color=(1,1,1), mode='sphere', scale_factor=0.2)
+    mlab.points3d(100, 0, -100, color=(1,1,1), mode='sphere', scale_factor=0.2)
     
     #draw axis
     axes=np.array([
@@ -80,10 +75,10 @@ def draw_lidar(pc, color=None, fig=None, bgcolor=(0,0,0), pts_scale=1, pts_mode=
     x2 = TOP_X_MAX
     y1 = TOP_Y_MIN
     y2 = TOP_Y_MAX
-    mlab.plot3d([x1, x1], [y1, y2], [0,0], color=(0.5,0.5,0.5), tube_radius=0.1, line_width=0.5, figure=fig)
-    mlab.plot3d([x2, x2], [y1, y2], [0,0], color=(0.5,0.5,0.5), tube_radius=0.1, line_width=0.5, figure=fig)
-    mlab.plot3d([x1, x2], [y1, y1], [0,0], color=(0.5,0.5,0.5), tube_radius=0.1, line_width=0.5, figure=fig)
-    mlab.plot3d([x1, x2], [y2, y2], [0,0], color=(0.5,0.5,0.5), tube_radius=0.1, line_width=0.5, figure=fig)
+    # mlab.plot3d([x1, x1], [y1, y2], [0,0], color=(0.5,0.5,0.5), tube_radius=0.1, line_width=0.5, figure=fig)
+    # mlab.plot3d([x2, x2], [y1, y2], [0,0], color=(0.5,0.5,0.5), tube_radius=0.1, line_width=0.5, figure=fig)
+    # mlab.plot3d([x1, x2], [y1, y1], [0,0], color=(0.5,0.5,0.5), tube_radius=0.1, line_width=0.5, figure=fig)
+    # mlab.plot3d([x1, x2], [y2, y2], [0,0], color=(0.5,0.5,0.5), tube_radius=0.1, line_width=0.5, figure=fig)
     
     #mlab.orientation_axes()
     mlab.view(azimuth=0, elevation=50, focalpoint=[0,0,0], distance=150.0)

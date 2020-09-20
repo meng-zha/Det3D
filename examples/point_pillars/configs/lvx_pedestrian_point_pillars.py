@@ -204,6 +204,7 @@ test_pipeline = [
 
 train_anno = data_root+"/lvx_infos_train.pkl"
 val_anno = data_root+"/lvx_infos_val.pkl"
+# test_anno = data_root+"/lvx_infos_test.pkl"
 test_anno = None
 start_idx = [[0,115],[117,332],[333,560]] # 训练集为三段
 
@@ -231,6 +232,7 @@ data = dict(
     test=dict(
         type=dataset_type,
         root_path=data_root,
+        test_mode=True,
         info_path=data_root + "/lvx_infos_test.pkl",
         ann_file=test_anno,
         # start_idx = [[0,100]],
